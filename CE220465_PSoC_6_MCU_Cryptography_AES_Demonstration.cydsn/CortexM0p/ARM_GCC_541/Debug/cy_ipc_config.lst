@@ -1,0 +1,2618 @@
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 1
+
+
+   1              		.syntax unified
+   2              		.cpu cortex-m0plus
+   3              		.fpu softvfp
+   4              		.eabi_attribute 20, 1
+   5              		.eabi_attribute 21, 1
+   6              		.eabi_attribute 23, 3
+   7              		.eabi_attribute 24, 1
+   8              		.eabi_attribute 25, 1
+   9              		.eabi_attribute 26, 1
+  10              		.eabi_attribute 30, 1
+  11              		.eabi_attribute 34, 0
+  12              		.eabi_attribute 18, 4
+  13              		.thumb
+  14              		.syntax unified
+  15              		.file	"cy_ipc_config.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.section	.cy_ramfunc,"ax",%progbits
+  20              		.align	2
+  21              		.code	16
+  22              		.thumb_func
+  23              		.type	Cy_Flash_NotifyHandler, %function
+  24              	Cy_Flash_NotifyHandler:
+  25              	.LFB144:
+  26              		.file 1 "cy_ipc_config.c"
+   1:cy_ipc_config.c **** /***************************************************************************//**
+   2:cy_ipc_config.c **** * \file cy_ipc_config.c
+   3:cy_ipc_config.c **** * \version 1.10
+   4:cy_ipc_config.c **** *
+   5:cy_ipc_config.c **** *  Description:
+   6:cy_ipc_config.c **** *  This C file is not intended to be part of the IPC driver. It is the code
+   7:cy_ipc_config.c **** *  required to configure the device specific IPC channels for semaphores
+   8:cy_ipc_config.c **** *  and pipes.
+   9:cy_ipc_config.c **** *
+  10:cy_ipc_config.c **** ********************************************************************************
+  11:cy_ipc_config.c **** * Copyright 2016-2017, Cypress Semiconductor Corporation.  All rights reserved.
+  12:cy_ipc_config.c **** * You may use this file only in accordance with the license, terms, conditions,
+  13:cy_ipc_config.c **** * disclaimers, and limitations in the end user license agreement accompanying
+  14:cy_ipc_config.c **** * the software package with which this file was provided.
+  15:cy_ipc_config.c **** *******************************************************************************/
+  16:cy_ipc_config.c **** 
+  17:cy_ipc_config.c **** #include "flash/cy_flash.h"
+  18:cy_ipc_config.c **** #include "ipc/cy_ipc_drv.h"
+  19:cy_ipc_config.c **** #include "ipc/cy_ipc_pipe.h"
+  20:cy_ipc_config.c **** #include "ipc/cy_ipc_sema.h"
+  21:cy_ipc_config.c **** #include "sysint/cy_sysint.h"
+  22:cy_ipc_config.c **** 
+  23:cy_ipc_config.c **** #include "cy_ipc_config.h"
+  24:cy_ipc_config.c **** 
+  25:cy_ipc_config.c **** static void Cy_Flash_NotifyHandler(uint32_t * msgPtr);
+  26:cy_ipc_config.c **** 
+  27:cy_ipc_config.c **** /* Create an array of endpoint structures */
+  28:cy_ipc_config.c **** static cy_stc_ipc_pipe_ep_t        cy_ipc_pipe_sysEpArray[CY_IPC_MAX_ENDPOINTS];
+  29:cy_ipc_config.c **** 
+  30:cy_ipc_config.c **** #define CY_CYPIPE_DEFAULT_CONFIG    \
+  31:cy_ipc_config.c **** {\
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 2
+
+
+  32:cy_ipc_config.c ****     /* .ep0ConfigData */ {\
+  33:cy_ipc_config.c ****         /* .ipcNotifierNumber    */  CY_IPC_INTR_CYPIPE_EP0,\
+  34:cy_ipc_config.c ****         /* .ipcNotifierPriority  */  CY_IPC_INTR_CYPIPE_PRIOR_EP0,\
+  35:cy_ipc_config.c ****         /* .ipcNotifierMuxNumber */  CY_IPC_INTR_CYPIPE_MUX_EP0,\
+  36:cy_ipc_config.c ****         /* .epAddress            */  CY_IPC_EP_CYPIPE_CM0_ADDR,\
+  37:cy_ipc_config.c ****         /* .epConfig             */  CY_IPC_CYPIPE_CONFIG_EP0\
+  38:cy_ipc_config.c ****     },\
+  39:cy_ipc_config.c ****     /* .ep1ConfigData */ {\
+  40:cy_ipc_config.c ****         /* .ipcNotifierNumber    */  CY_IPC_INTR_CYPIPE_EP1,\
+  41:cy_ipc_config.c ****         /* .ipcNotifierPriority  */  CY_IPC_INTR_CYPIPE_PRIOR_EP1,\
+  42:cy_ipc_config.c ****         /* .ipcNotifierMuxNumber */  0u,\
+  43:cy_ipc_config.c ****         /* .epAddress            */  CY_IPC_EP_CYPIPE_CM4_ADDR,\
+  44:cy_ipc_config.c ****         /* .epConfig             */  CY_IPC_CYPIPE_CONFIG_EP1\
+  45:cy_ipc_config.c ****     },\
+  46:cy_ipc_config.c ****     /* .endpointClientsCount     */  CY_IPC_CYPIPE_CLIENT_CNT,\
+  47:cy_ipc_config.c ****     /* .endpointsCallbacksArray  */  cy_ipc_pipe_sysCbArray,\
+  48:cy_ipc_config.c ****     /* .userPipeIsrHandler       */  &Cy_IPC_SystemPipeIsr\
+  49:cy_ipc_config.c **** }
+  50:cy_ipc_config.c **** 
+  51:cy_ipc_config.c **** /*******************************************************************************
+  52:cy_ipc_config.c **** * Function Name: Cy_IPC_SystemSemaInit
+  53:cy_ipc_config.c **** ****************************************************************************//**
+  54:cy_ipc_config.c **** *
+  55:cy_ipc_config.c **** * Initializes the system semaphores.
+  56:cy_ipc_config.c **** *
+  57:cy_ipc_config.c **** *******************************************************************************/
+  58:cy_ipc_config.c **** void Cy_IPC_SystemSemaInit(void)
+  59:cy_ipc_config.c **** {
+  60:cy_ipc_config.c **** /* Create array used for semaphores */
+  61:cy_ipc_config.c **** #if !(CY_CPU_CORTEX_M0P)
+  62:cy_ipc_config.c ****     (void) Cy_IPC_Sema_Init(CY_IPC_CHAN_SEMA, 0ul, NULL);
+  63:cy_ipc_config.c **** #else
+  64:cy_ipc_config.c ****     static uint32_t ipcSemaArray[CY_IPC_SEMA_COUNT / CY_IPC_SEMA_PER_WORD];
+  65:cy_ipc_config.c ****     (void) Cy_IPC_Sema_Init(CY_IPC_CHAN_SEMA, CY_IPC_SEMA_COUNT, ipcSemaArray);
+  66:cy_ipc_config.c **** #endif
+  67:cy_ipc_config.c **** }
+  68:cy_ipc_config.c **** 
+  69:cy_ipc_config.c **** /*******************************************************************************
+  70:cy_ipc_config.c **** * Function Name: Cy_IPC_SystemPipeInit
+  71:cy_ipc_config.c **** ****************************************************************************//**
+  72:cy_ipc_config.c **** *
+  73:cy_ipc_config.c **** * Initializes the system pipes. The system pipes are used by BLE.
+  74:cy_ipc_config.c **** * \note The function should be called on all CPUs.
+  75:cy_ipc_config.c **** *
+  76:cy_ipc_config.c **** *******************************************************************************/
+  77:cy_ipc_config.c **** void Cy_IPC_SystemPipeInit(void)
+  78:cy_ipc_config.c **** {
+  79:cy_ipc_config.c ****     uint32_t intr;
+  80:cy_ipc_config.c **** 
+  81:cy_ipc_config.c ****     intr = Cy_SysLib_EnterCriticalSection();
+  82:cy_ipc_config.c **** 
+  83:cy_ipc_config.c ****     static cy_ipc_pipe_callback_ptr_t cy_ipc_pipe_sysCbArray[CY_IPC_CYPIPE_CLIENT_CNT];
+  84:cy_ipc_config.c **** 
+  85:cy_ipc_config.c ****     static const cy_stc_ipc_pipe_config_t systemPipeConfig = CY_CYPIPE_DEFAULT_CONFIG;
+  86:cy_ipc_config.c **** 
+  87:cy_ipc_config.c ****     Cy_IPC_Pipe_Config(cy_ipc_pipe_sysEpArray);
+  88:cy_ipc_config.c **** 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 3
+
+
+  89:cy_ipc_config.c ****     Cy_IPC_Pipe_Init(&systemPipeConfig);
+  90:cy_ipc_config.c **** 
+  91:cy_ipc_config.c ****     (void)Cy_IPC_Pipe_RegisterCallback(CY_IPC_EP_CYPIPE_ADDR, &Cy_Flash_NotifyHandler, (uint32_t)CY
+  92:cy_ipc_config.c **** 
+  93:cy_ipc_config.c ****     Cy_SysLib_ExitCriticalSection(intr);
+  94:cy_ipc_config.c **** }
+  95:cy_ipc_config.c **** 
+  96:cy_ipc_config.c **** /*******************************************************************************
+  97:cy_ipc_config.c **** * Function Name: Cy_IPC_SystemPipeIsr
+  98:cy_ipc_config.c **** ****************************************************************************//**
+  99:cy_ipc_config.c **** *
+ 100:cy_ipc_config.c **** * This is the interrupt service routine for the system pipe.
+ 101:cy_ipc_config.c **** *
+ 102:cy_ipc_config.c **** *******************************************************************************/
+ 103:cy_ipc_config.c **** void Cy_IPC_SystemPipeIsr(void)
+ 104:cy_ipc_config.c **** {
+ 105:cy_ipc_config.c ****     Cy_IPC_Pipe_ExecCallback(&cy_ipc_pipe_sysEpArray[CY_IPC_EP_CYPIPE_ADDR]);
+ 106:cy_ipc_config.c **** }
+ 107:cy_ipc_config.c **** 
+ 108:cy_ipc_config.c **** /*******************************************************************************
+ 109:cy_ipc_config.c **** * Function Name: Cy_Flash_NotifyHandler
+ 110:cy_ipc_config.c **** ****************************************************************************//**
+ 111:cy_ipc_config.c **** *
+ 112:cy_ipc_config.c **** * This is the interrupt service routine for the pipe notifications.
+ 113:cy_ipc_config.c **** *
+ 114:cy_ipc_config.c **** *******************************************************************************/
+ 115:cy_ipc_config.c **** #if defined (__ICCARM__)
+ 116:cy_ipc_config.c ****     __ramfunc 
+ 117:cy_ipc_config.c **** #else
+ 118:cy_ipc_config.c ****     CY_SECTION(".cy_ramfunc")
+ 119:cy_ipc_config.c **** #endif
+ 120:cy_ipc_config.c **** static void Cy_Flash_NotifyHandler(uint32_t * msgPtr)
+ 121:cy_ipc_config.c **** {
+  27              		.loc 1 121 0
+  28              		.cfi_startproc
+  29              		@ args = 0, pretend = 0, frame = 0
+  30              		@ frame_needed = 0, uses_anonymous_args = 0
+  31              	.LVL0:
+  32 0000 10B5     		push	{r4, lr}
+  33              		.cfi_def_cfa_offset 8
+  34              		.cfi_offset 4, -8
+  35              		.cfi_offset 14, -4
+  36              	.LVL1:
+ 122:cy_ipc_config.c ****     uint32_t intr;
+ 123:cy_ipc_config.c **** 
+ 124:cy_ipc_config.c ****     IPC_MSG *ipcMsgPtr = (IPC_MSG *)msgPtr;
+ 125:cy_ipc_config.c **** 
+ 126:cy_ipc_config.c ****     if (CY_FLASH_ENTER_WAIT_LOOP == ipcMsgPtr->pktType)
+  37              		.loc 1 126 0
+  38 0002 4378     		ldrb	r3, [r0, #1]
+  39 0004 FF2B     		cmp	r3, #255
+  40 0006 0FD1     		bne	.L1
+ 127:cy_ipc_config.c ****     {
+ 128:cy_ipc_config.c ****         intr = Cy_SysLib_EnterCriticalSection();
+  41              		.loc 1 128 0
+  42 0008 FFF7FEFF 		bl	Cy_SysLib_EnterCriticalSection
+  43              	.LVL2:
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 4
+
+
+  44 000c 0400     		movs	r4, r0
+  45              	.LVL3:
+ 129:cy_ipc_config.c **** 
+ 130:cy_ipc_config.c ****         /* Notification to the Flash driver to start the current operation */
+ 131:cy_ipc_config.c ****         (void) Cy_IPC_Sema_Set(CY_FLASH_WAIT_SEMA, true);
+  46              		.loc 1 131 0
+  47 000e 0121     		movs	r1, #1
+  48 0010 0020     		movs	r0, #0
+  49              	.LVL4:
+  50 0012 FFF7FEFF 		bl	Cy_IPC_Sema_Set
+  51              	.LVL5:
+  52              	.L3:
+ 132:cy_ipc_config.c **** 
+ 133:cy_ipc_config.c ****         /* Notification to me about the end of the operation */
+ 134:cy_ipc_config.c ****         while (CY_IPC_SEMA_STATUS_LOCKED == Cy_IPC_Sema_Status(CY_FLASH_WAIT_SEMA))
+  53              		.loc 1 134 0 discriminator 1
+  54 0016 0020     		movs	r0, #0
+  55 0018 FFF7FEFF 		bl	Cy_IPC_Sema_Status
+  56              	.LVL6:
+  57 001c 034B     		ldr	r3, .L4
+  58 001e 9842     		cmp	r0, r3
+  59 0020 F9D0     		beq	.L3
+ 135:cy_ipc_config.c ****         {
+ 136:cy_ipc_config.c ****         }
+ 137:cy_ipc_config.c **** 
+ 138:cy_ipc_config.c ****         Cy_SysLib_ExitCriticalSection(intr);
+  60              		.loc 1 138 0
+  61 0022 2000     		movs	r0, r4
+  62 0024 FFF7FEFF 		bl	Cy_SysLib_ExitCriticalSection
+  63              	.LVL7:
+  64              	.L1:
+ 139:cy_ipc_config.c ****     }
+ 140:cy_ipc_config.c **** }
+  65              		.loc 1 140 0
+  66              		@ sp needed
+  67 0028 10BD     		pop	{r4, pc}
+  68              	.L5:
+  69 002a C046     		.align	2
+  70              	.L4:
+  71 002c 01018800 		.word	8913153
+  72              		.cfi_endproc
+  73              	.LFE144:
+  74              		.size	Cy_Flash_NotifyHandler, .-Cy_Flash_NotifyHandler
+  75              		.section	.text.NvicMux1_IRQHandler,"ax",%progbits
+  76              		.align	2
+  77              		.global	NvicMux1_IRQHandler
+  78              		.code	16
+  79              		.thumb_func
+  80              		.type	NvicMux1_IRQHandler, %function
+  81              	NvicMux1_IRQHandler:
+  82              	.LFB143:
+ 104:cy_ipc_config.c ****     Cy_IPC_Pipe_ExecCallback(&cy_ipc_pipe_sysEpArray[CY_IPC_EP_CYPIPE_ADDR]);
+  83              		.loc 1 104 0
+  84              		.cfi_startproc
+  85              		@ args = 0, pretend = 0, frame = 0
+  86              		@ frame_needed = 0, uses_anonymous_args = 0
+  87 0000 10B5     		push	{r4, lr}
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 5
+
+
+  88              		.cfi_def_cfa_offset 8
+  89              		.cfi_offset 4, -8
+  90              		.cfi_offset 14, -4
+ 105:cy_ipc_config.c **** }
+  91              		.loc 1 105 0
+  92 0002 0248     		ldr	r0, .L7
+  93 0004 FFF7FEFF 		bl	Cy_IPC_Pipe_ExecCallback
+  94              	.LVL8:
+ 106:cy_ipc_config.c **** 
+  95              		.loc 1 106 0
+  96              		@ sp needed
+  97 0008 10BD     		pop	{r4, pc}
+  98              	.L8:
+  99 000a C046     		.align	2
+ 100              	.L7:
+ 101 000c 00000000 		.word	.LANCHOR0
+ 102              		.cfi_endproc
+ 103              	.LFE143:
+ 104              		.size	NvicMux1_IRQHandler, .-NvicMux1_IRQHandler
+ 105              		.section	.text.Cy_IPC_SystemSemaInit,"ax",%progbits
+ 106              		.align	2
+ 107              		.global	Cy_IPC_SystemSemaInit
+ 108              		.code	16
+ 109              		.thumb_func
+ 110              		.type	Cy_IPC_SystemSemaInit, %function
+ 111              	Cy_IPC_SystemSemaInit:
+ 112              	.LFB141:
+  59:cy_ipc_config.c **** /* Create array used for semaphores */
+ 113              		.loc 1 59 0
+ 114              		.cfi_startproc
+ 115              		@ args = 0, pretend = 0, frame = 0
+ 116              		@ frame_needed = 0, uses_anonymous_args = 0
+ 117 0000 10B5     		push	{r4, lr}
+ 118              		.cfi_def_cfa_offset 8
+ 119              		.cfi_offset 4, -8
+ 120              		.cfi_offset 14, -4
+  65:cy_ipc_config.c **** #endif
+ 121              		.loc 1 65 0
+ 122 0002 034A     		ldr	r2, .L10
+ 123 0004 6032     		adds	r2, r2, #96
+ 124 0006 8021     		movs	r1, #128
+ 125 0008 0420     		movs	r0, #4
+ 126 000a FFF7FEFF 		bl	Cy_IPC_Sema_Init
+ 127              	.LVL9:
+  67:cy_ipc_config.c **** 
+ 128              		.loc 1 67 0
+ 129              		@ sp needed
+ 130 000e 10BD     		pop	{r4, pc}
+ 131              	.L11:
+ 132              		.align	2
+ 133              	.L10:
+ 134 0010 00010000 		.word	.LANCHOR1
+ 135              		.cfi_endproc
+ 136              	.LFE141:
+ 137              		.size	Cy_IPC_SystemSemaInit, .-Cy_IPC_SystemSemaInit
+ 138              		.section	.text.Cy_IPC_SystemPipeInit,"ax",%progbits
+ 139              		.align	2
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 6
+
+
+ 140              		.global	Cy_IPC_SystemPipeInit
+ 141              		.code	16
+ 142              		.thumb_func
+ 143              		.type	Cy_IPC_SystemPipeInit, %function
+ 144              	Cy_IPC_SystemPipeInit:
+ 145              	.LFB142:
+  78:cy_ipc_config.c ****     uint32_t intr;
+ 146              		.loc 1 78 0
+ 147              		.cfi_startproc
+ 148              		@ args = 0, pretend = 0, frame = 0
+ 149              		@ frame_needed = 0, uses_anonymous_args = 0
+ 150 0000 10B5     		push	{r4, lr}
+ 151              		.cfi_def_cfa_offset 8
+ 152              		.cfi_offset 4, -8
+ 153              		.cfi_offset 14, -4
+  81:cy_ipc_config.c **** 
+ 154              		.loc 1 81 0
+ 155 0002 FFF7FEFF 		bl	Cy_SysLib_EnterCriticalSection
+ 156              	.LVL10:
+ 157 0006 0400     		movs	r4, r0
+ 158              	.LVL11:
+  87:cy_ipc_config.c **** 
+ 159              		.loc 1 87 0
+ 160 0008 0748     		ldr	r0, .L13
+ 161              	.LVL12:
+ 162 000a FFF7FEFF 		bl	Cy_IPC_Pipe_Config
+ 163              	.LVL13:
+  89:cy_ipc_config.c **** 
+ 164              		.loc 1 89 0
+ 165 000e 0748     		ldr	r0, .L13+4
+ 166 0010 FFF7FEFF 		bl	Cy_IPC_Pipe_Init
+ 167              	.LVL14:
+  91:cy_ipc_config.c **** 
+ 168              		.loc 1 91 0
+ 169 0014 0222     		movs	r2, #2
+ 170 0016 0649     		ldr	r1, .L13+8
+ 171 0018 0020     		movs	r0, #0
+ 172 001a FFF7FEFF 		bl	Cy_IPC_Pipe_RegisterCallback
+ 173              	.LVL15:
+  93:cy_ipc_config.c **** }
+ 174              		.loc 1 93 0
+ 175 001e 2000     		movs	r0, r4
+ 176 0020 FFF7FEFF 		bl	Cy_SysLib_ExitCriticalSection
+ 177              	.LVL16:
+  94:cy_ipc_config.c **** 
+ 178              		.loc 1 94 0
+ 179              		@ sp needed
+ 180              	.LVL17:
+ 181 0024 10BD     		pop	{r4, pc}
+ 182              	.L14:
+ 183 0026 C046     		.align	2
+ 184              	.L13:
+ 185 0028 00000000 		.word	.LANCHOR0
+ 186 002c 00000000 		.word	.LANCHOR2
+ 187 0030 00000000 		.word	Cy_Flash_NotifyHandler
+ 188              		.cfi_endproc
+ 189              	.LFE142:
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 7
+
+
+ 190              		.size	Cy_IPC_SystemPipeInit, .-Cy_IPC_SystemPipeInit
+ 191              		.section	.rodata
+ 192              		.align	2
+ 193              		.set	.LANCHOR2,. + 0
+ 194              		.type	systemPipeConfig.10234, %object
+ 195              		.size	systemPipeConfig.10234, 52
+ 196              	systemPipeConfig.10234:
+ 197 0000 03000000 		.word	3
+ 198 0004 01000000 		.word	1
+ 199 0008 01000000 		.word	1
+ 200 000c 00000000 		.word	0
+ 201 0010 05036000 		.word	6292229
+ 202 0014 04000000 		.word	4
+ 203 0018 01000000 		.word	1
+ 204 001c 00000000 		.word	0
+ 205 0020 01000000 		.word	1
+ 206 0024 06046000 		.word	6292486
+ 207 0028 08000000 		.word	8
+ 208 002c 70010000 		.word	cy_ipc_pipe_sysCbArray.10233
+ 209 0030 00000000 		.word	NvicMux1_IRQHandler
+ 210              		.bss
+ 211              		.align	2
+ 212              		.set	.LANCHOR0,. + 0
+ 213              		.set	.LANCHOR1,. + 256
+ 214              		.type	cy_ipc_pipe_sysEpArray, %object
+ 215              		.size	cy_ipc_pipe_sysEpArray, 352
+ 216              	cy_ipc_pipe_sysEpArray:
+ 217 0000 00000000 		.space	352
+ 217      00000000 
+ 217      00000000 
+ 217      00000000 
+ 217      00000000 
+ 218              		.type	ipcSemaArray.10228, %object
+ 219              		.size	ipcSemaArray.10228, 16
+ 220              	ipcSemaArray.10228:
+ 221 0160 00000000 		.space	16
+ 221      00000000 
+ 221      00000000 
+ 221      00000000 
+ 222              		.type	cy_ipc_pipe_sysCbArray.10233, %object
+ 223              		.size	cy_ipc_pipe_sysCbArray.10233, 32
+ 224              	cy_ipc_pipe_sysCbArray.10233:
+ 225 0170 00000000 		.space	32
+ 225      00000000 
+ 225      00000000 
+ 225      00000000 
+ 225      00000000 
+ 226              		.text
+ 227              	.Letext0:
+ 228              		.file 2 "Generated_Source\\PSoC6\\pdl\\devices/psoc6/psoc63/include/cy8c6347bzi_bld53.h"
+ 229              		.file 3 "c:\\program files (x86)\\cypress\\psoc creator\\4.2\\psoc creator\\import\\gnu\\arm\\5.4.
+ 230              		.file 4 "c:\\program files (x86)\\cypress\\psoc creator\\4.2\\psoc creator\\import\\gnu\\arm\\5.4.
+ 231              		.file 5 "Generated_Source\\PSoC6\\pdl\\devices/psoc6/ip/cyip_ipc.h"
+ 232              		.file 6 "Generated_Source\\PSoC6\\pdl\\drivers/peripheral/syslib/cy_syslib.h"
+ 233              		.file 7 "Generated_Source\\PSoC6\\pdl\\drivers/peripheral/ipc/cy_ipc_sema.h"
+ 234              		.file 8 "Generated_Source\\PSoC6\\pdl\\drivers/peripheral/ipc/cy_ipc_pipe.h"
+ 235              		.file 9 "Generated_Source\\PSoC6\\pdl\\drivers/peripheral/flash/cy_flash.h"
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 8
+
+
+ 236              		.section	.debug_info,"",%progbits
+ 237              	.Ldebug_info0:
+ 238 0000 46070000 		.4byte	0x746
+ 239 0004 0400     		.2byte	0x4
+ 240 0006 00000000 		.4byte	.Ldebug_abbrev0
+ 241 000a 04       		.byte	0x4
+ 242 000b 01       		.uleb128 0x1
+ 243 000c 90060000 		.4byte	.LASF132
+ 244 0010 0C       		.byte	0xc
+ 245 0011 42040000 		.4byte	.LASF133
+ 246 0015 AB080000 		.4byte	.LASF134
+ 247 0019 00000000 		.4byte	.Ldebug_ranges0+0
+ 248 001d 00000000 		.4byte	0
+ 249 0021 00000000 		.4byte	.Ldebug_line0
+ 250 0025 02       		.uleb128 0x2
+ 251 0026 02       		.byte	0x2
+ 252 0027 1C010000 		.4byte	0x11c
+ 253 002b 02       		.byte	0x2
+ 254 002c 24       		.byte	0x24
+ 255 002d 1C010000 		.4byte	0x11c
+ 256 0031 03       		.uleb128 0x3
+ 257 0032 28000000 		.4byte	.LASF0
+ 258 0036 71       		.sleb128 -15
+ 259 0037 03       		.uleb128 0x3
+ 260 0038 7C070000 		.4byte	.LASF1
+ 261 003c 72       		.sleb128 -14
+ 262 003d 03       		.uleb128 0x3
+ 263 003e EE010000 		.4byte	.LASF2
+ 264 0042 73       		.sleb128 -13
+ 265 0043 03       		.uleb128 0x3
+ 266 0044 A3040000 		.4byte	.LASF3
+ 267 0048 7B       		.sleb128 -5
+ 268 0049 03       		.uleb128 0x3
+ 269 004a C4010000 		.4byte	.LASF4
+ 270 004e 7E       		.sleb128 -2
+ 271 004f 03       		.uleb128 0x3
+ 272 0050 ED030000 		.4byte	.LASF5
+ 273 0054 7F       		.sleb128 -1
+ 274 0055 04       		.uleb128 0x4
+ 275 0056 87040000 		.4byte	.LASF6
+ 276 005a 00       		.byte	0
+ 277 005b 04       		.uleb128 0x4
+ 278 005c FD070000 		.4byte	.LASF7
+ 279 0060 01       		.byte	0x1
+ 280 0061 04       		.uleb128 0x4
+ 281 0062 33000000 		.4byte	.LASF8
+ 282 0066 02       		.byte	0x2
+ 283 0067 04       		.uleb128 0x4
+ 284 0068 4D010000 		.4byte	.LASF9
+ 285 006c 03       		.byte	0x3
+ 286 006d 04       		.uleb128 0x4
+ 287 006e 4E020000 		.4byte	.LASF10
+ 288 0072 04       		.byte	0x4
+ 289 0073 04       		.uleb128 0x4
+ 290 0074 3F060000 		.4byte	.LASF11
+ 291 0078 05       		.byte	0x5
+ 292 0079 04       		.uleb128 0x4
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 9
+
+
+ 293 007a BA070000 		.4byte	.LASF12
+ 294 007e 06       		.byte	0x6
+ 295 007f 04       		.uleb128 0x4
+ 296 0080 4A080000 		.4byte	.LASF13
+ 297 0084 07       		.byte	0x7
+ 298 0085 04       		.uleb128 0x4
+ 299 0086 25030000 		.4byte	.LASF14
+ 300 008a 08       		.byte	0x8
+ 301 008b 04       		.uleb128 0x4
+ 302 008c 95040000 		.4byte	.LASF15
+ 303 0090 09       		.byte	0x9
+ 304 0091 04       		.uleb128 0x4
+ 305 0092 90070000 		.4byte	.LASF16
+ 306 0096 0A       		.byte	0xa
+ 307 0097 04       		.uleb128 0x4
+ 308 0098 0B080000 		.4byte	.LASF17
+ 309 009c 0B       		.byte	0xb
+ 310 009d 04       		.uleb128 0x4
+ 311 009e D3020000 		.4byte	.LASF18
+ 312 00a2 0C       		.byte	0xc
+ 313 00a3 04       		.uleb128 0x4
+ 314 00a4 5B040000 		.4byte	.LASF19
+ 315 00a8 0D       		.byte	0xd
+ 316 00a9 04       		.uleb128 0x4
+ 317 00aa 3B050000 		.4byte	.LASF20
+ 318 00ae 0E       		.byte	0xe
+ 319 00af 04       		.uleb128 0x4
+ 320 00b0 19000000 		.4byte	.LASF21
+ 321 00b4 0F       		.byte	0xf
+ 322 00b5 04       		.uleb128 0x4
+ 323 00b6 21010000 		.4byte	.LASF22
+ 324 00ba 10       		.byte	0x10
+ 325 00bb 04       		.uleb128 0x4
+ 326 00bc 1A050000 		.4byte	.LASF23
+ 327 00c0 11       		.byte	0x11
+ 328 00c1 04       		.uleb128 0x4
+ 329 00c2 33070000 		.4byte	.LASF24
+ 330 00c6 12       		.byte	0x12
+ 331 00c7 04       		.uleb128 0x4
+ 332 00c8 9F070000 		.4byte	.LASF25
+ 333 00cc 13       		.byte	0x13
+ 334 00cd 04       		.uleb128 0x4
+ 335 00ce 8C020000 		.4byte	.LASF26
+ 336 00d2 14       		.byte	0x14
+ 337 00d3 04       		.uleb128 0x4
+ 338 00d4 DE030000 		.4byte	.LASF27
+ 339 00d8 15       		.byte	0x15
+ 340 00d9 04       		.uleb128 0x4
+ 341 00da D7070000 		.4byte	.LASF28
+ 342 00de 16       		.byte	0x16
+ 343 00df 04       		.uleb128 0x4
+ 344 00e0 59050000 		.4byte	.LASF29
+ 345 00e4 17       		.byte	0x17
+ 346 00e5 04       		.uleb128 0x4
+ 347 00e6 D3000000 		.4byte	.LASF30
+ 348 00ea 18       		.byte	0x18
+ 349 00eb 04       		.uleb128 0x4
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 10
+
+
+ 350 00ec C9040000 		.4byte	.LASF31
+ 351 00f0 19       		.byte	0x19
+ 352 00f1 04       		.uleb128 0x4
+ 353 00f2 F5020000 		.4byte	.LASF32
+ 354 00f6 1A       		.byte	0x1a
+ 355 00f7 04       		.uleb128 0x4
+ 356 00f8 6D070000 		.4byte	.LASF33
+ 357 00fc 1B       		.byte	0x1b
+ 358 00fd 04       		.uleb128 0x4
+ 359 00fe 64010000 		.4byte	.LASF34
+ 360 0102 1C       		.byte	0x1c
+ 361 0103 04       		.uleb128 0x4
+ 362 0104 9F000000 		.4byte	.LASF35
+ 363 0108 1D       		.byte	0x1d
+ 364 0109 04       		.uleb128 0x4
+ 365 010a C8070000 		.4byte	.LASF36
+ 366 010e 1E       		.byte	0x1e
+ 367 010f 04       		.uleb128 0x4
+ 368 0110 FD010000 		.4byte	.LASF37
+ 369 0114 1F       		.byte	0x1f
+ 370 0115 04       		.uleb128 0x4
+ 371 0116 9E050000 		.4byte	.LASF38
+ 372 011a F0       		.byte	0xf0
+ 373 011b 00       		.byte	0
+ 374 011c 05       		.uleb128 0x5
+ 375 011d 02       		.byte	0x2
+ 376 011e 05       		.byte	0x5
+ 377 011f AF050000 		.4byte	.LASF39
+ 378 0123 06       		.uleb128 0x6
+ 379 0124 63070000 		.4byte	.LASF42
+ 380 0128 02       		.byte	0x2
+ 381 0129 F4       		.byte	0xf4
+ 382 012a 25000000 		.4byte	0x25
+ 383 012e 05       		.uleb128 0x5
+ 384 012f 01       		.byte	0x1
+ 385 0130 08       		.byte	0x8
+ 386 0131 7A050000 		.4byte	.LASF40
+ 387 0135 05       		.uleb128 0x5
+ 388 0136 01       		.byte	0x1
+ 389 0137 06       		.byte	0x6
+ 390 0138 15010000 		.4byte	.LASF41
+ 391 013c 06       		.uleb128 0x6
+ 392 013d 41000000 		.4byte	.LASF43
+ 393 0141 03       		.byte	0x3
+ 394 0142 1D       		.byte	0x1d
+ 395 0143 2E010000 		.4byte	0x12e
+ 396 0147 06       		.uleb128 0x6
+ 397 0148 58070000 		.4byte	.LASF44
+ 398 014c 03       		.byte	0x3
+ 399 014d 2B       		.byte	0x2b
+ 400 014e 52010000 		.4byte	0x152
+ 401 0152 05       		.uleb128 0x5
+ 402 0153 02       		.byte	0x2
+ 403 0154 07       		.byte	0x7
+ 404 0155 33030000 		.4byte	.LASF45
+ 405 0159 05       		.uleb128 0x5
+ 406 015a 04       		.byte	0x4
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 11
+
+
+ 407 015b 05       		.byte	0x5
+ 408 015c 5B010000 		.4byte	.LASF46
+ 409 0160 06       		.uleb128 0x6
+ 410 0161 25020000 		.4byte	.LASF47
+ 411 0165 03       		.byte	0x3
+ 412 0166 41       		.byte	0x41
+ 413 0167 6B010000 		.4byte	0x16b
+ 414 016b 05       		.uleb128 0x5
+ 415 016c 04       		.byte	0x4
+ 416 016d 07       		.byte	0x7
+ 417 016e C1020000 		.4byte	.LASF48
+ 418 0172 05       		.uleb128 0x5
+ 419 0173 08       		.byte	0x8
+ 420 0174 05       		.byte	0x5
+ 421 0175 07010000 		.4byte	.LASF49
+ 422 0179 05       		.uleb128 0x5
+ 423 017a 08       		.byte	0x8
+ 424 017b 07       		.byte	0x7
+ 425 017c 88000000 		.4byte	.LASF50
+ 426 0180 07       		.uleb128 0x7
+ 427 0181 04       		.byte	0x4
+ 428 0182 05       		.byte	0x5
+ 429 0183 696E7400 		.ascii	"int\000"
+ 430 0187 05       		.uleb128 0x5
+ 431 0188 04       		.byte	0x4
+ 432 0189 07       		.byte	0x7
+ 433 018a 7F020000 		.4byte	.LASF51
+ 434 018e 06       		.uleb128 0x6
+ 435 018f E6070000 		.4byte	.LASF52
+ 436 0193 04       		.byte	0x4
+ 437 0194 18       		.byte	0x18
+ 438 0195 3C010000 		.4byte	0x13c
+ 439 0199 06       		.uleb128 0x6
+ 440 019a 9B020000 		.4byte	.LASF53
+ 441 019e 04       		.byte	0x4
+ 442 019f 24       		.byte	0x24
+ 443 01a0 47010000 		.4byte	0x147
+ 444 01a4 06       		.uleb128 0x6
+ 445 01a5 58060000 		.4byte	.LASF54
+ 446 01a9 04       		.byte	0x4
+ 447 01aa 30       		.byte	0x30
+ 448 01ab 60010000 		.4byte	0x160
+ 449 01af 05       		.uleb128 0x5
+ 450 01b0 04       		.byte	0x4
+ 451 01b1 07       		.byte	0x7
+ 452 01b2 7E040000 		.4byte	.LASF55
+ 453 01b6 08       		.uleb128 0x8
+ 454 01b7 A4010000 		.4byte	0x1a4
+ 455 01bb 09       		.uleb128 0x9
+ 456 01bc B6010000 		.4byte	0x1b6
+ 457 01c0 0A       		.uleb128 0xa
+ 458 01c1 BB010000 		.4byte	0x1bb
+ 459 01c5 D0010000 		.4byte	0x1d0
+ 460 01c9 0B       		.uleb128 0xb
+ 461 01ca AF010000 		.4byte	0x1af
+ 462 01ce 02       		.byte	0x2
+ 463 01cf 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 12
+
+
+ 464 01d0 0A       		.uleb128 0xa
+ 465 01d1 BB010000 		.4byte	0x1bb
+ 466 01d5 E0010000 		.4byte	0x1e0
+ 467 01d9 0B       		.uleb128 0xb
+ 468 01da AF010000 		.4byte	0x1af
+ 469 01de 03       		.byte	0x3
+ 470 01df 00       		.byte	0
+ 471 01e0 0C       		.uleb128 0xc
+ 472 01e1 20       		.byte	0x20
+ 473 01e2 05       		.byte	0x5
+ 474 01e3 23       		.byte	0x23
+ 475 01e4 31020000 		.4byte	0x231
+ 476 01e8 0D       		.uleb128 0xd
+ 477 01e9 30010000 		.4byte	.LASF56
+ 478 01ed 05       		.byte	0x5
+ 479 01ee 24       		.byte	0x24
+ 480 01ef BB010000 		.4byte	0x1bb
+ 481 01f3 00       		.byte	0
+ 482 01f4 0D       		.uleb128 0xd
+ 483 01f5 62000000 		.4byte	.LASF57
+ 484 01f9 05       		.byte	0x5
+ 485 01fa 25       		.byte	0x25
+ 486 01fb B6010000 		.4byte	0x1b6
+ 487 01ff 04       		.byte	0x4
+ 488 0200 0D       		.uleb128 0xd
+ 489 0201 89060000 		.4byte	.LASF58
+ 490 0205 05       		.byte	0x5
+ 491 0206 26       		.byte	0x26
+ 492 0207 B6010000 		.4byte	0x1b6
+ 493 020b 08       		.byte	0x8
+ 494 020c 0D       		.uleb128 0xd
+ 495 020d 77030000 		.4byte	.LASF59
+ 496 0211 05       		.byte	0x5
+ 497 0212 27       		.byte	0x27
+ 498 0213 B6010000 		.4byte	0x1b6
+ 499 0217 0C       		.byte	0xc
+ 500 0218 0D       		.uleb128 0xd
+ 501 0219 30020000 		.4byte	.LASF60
+ 502 021d 05       		.byte	0x5
+ 503 021e 28       		.byte	0x28
+ 504 021f BB010000 		.4byte	0x1bb
+ 505 0223 10       		.byte	0x10
+ 506 0224 0D       		.uleb128 0xd
+ 507 0225 DA050000 		.4byte	.LASF61
+ 508 0229 05       		.byte	0x5
+ 509 022a 29       		.byte	0x29
+ 510 022b 36020000 		.4byte	0x236
+ 511 022f 14       		.byte	0x14
+ 512 0230 00       		.byte	0
+ 513 0231 08       		.uleb128 0x8
+ 514 0232 C0010000 		.4byte	0x1c0
+ 515 0236 09       		.uleb128 0x9
+ 516 0237 31020000 		.4byte	0x231
+ 517 023b 06       		.uleb128 0x6
+ 518 023c 30080000 		.4byte	.LASF62
+ 519 0240 05       		.byte	0x5
+ 520 0241 2A       		.byte	0x2a
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 13
+
+
+ 521 0242 E0010000 		.4byte	0x1e0
+ 522 0246 0C       		.uleb128 0xc
+ 523 0247 20       		.byte	0x20
+ 524 0248 05       		.byte	0x5
+ 525 0249 2F       		.byte	0x2f
+ 526 024a 8B020000 		.4byte	0x28b
+ 527 024e 0D       		.uleb128 0xd
+ 528 024f D8040000 		.4byte	.LASF63
+ 529 0253 05       		.byte	0x5
+ 530 0254 30       		.byte	0x30
+ 531 0255 B6010000 		.4byte	0x1b6
+ 532 0259 00       		.byte	0
+ 533 025a 0D       		.uleb128 0xd
+ 534 025b 52040000 		.4byte	.LASF64
+ 535 025f 05       		.byte	0x5
+ 536 0260 31       		.byte	0x31
+ 537 0261 B6010000 		.4byte	0x1b6
+ 538 0265 04       		.byte	0x4
+ 539 0266 0D       		.uleb128 0xd
+ 540 0267 F3070000 		.4byte	.LASF65
+ 541 026b 05       		.byte	0x5
+ 542 026c 32       		.byte	0x32
+ 543 026d B6010000 		.4byte	0x1b6
+ 544 0271 08       		.byte	0x8
+ 545 0272 0D       		.uleb128 0xd
+ 546 0273 29050000 		.4byte	.LASF66
+ 547 0277 05       		.byte	0x5
+ 548 0278 33       		.byte	0x33
+ 549 0279 BB010000 		.4byte	0x1bb
+ 550 027d 0C       		.byte	0xc
+ 551 027e 0D       		.uleb128 0xd
+ 552 027f DA050000 		.4byte	.LASF61
+ 553 0283 05       		.byte	0x5
+ 554 0284 34       		.byte	0x34
+ 555 0285 90020000 		.4byte	0x290
+ 556 0289 10       		.byte	0x10
+ 557 028a 00       		.byte	0
+ 558 028b 08       		.uleb128 0x8
+ 559 028c D0010000 		.4byte	0x1d0
+ 560 0290 09       		.uleb128 0x9
+ 561 0291 8B020000 		.4byte	0x28b
+ 562 0295 06       		.uleb128 0x6
+ 563 0296 C5050000 		.4byte	.LASF67
+ 564 029a 05       		.byte	0x5
+ 565 029b 35       		.byte	0x35
+ 566 029c 46020000 		.4byte	0x246
+ 567 02a0 0E       		.uleb128 0xe
+ 568 02a1 DD040000 		.4byte	.LASF68
+ 569 02a5 06       		.byte	0x6
+ 570 02a6 9C01     		.2byte	0x19c
+ 571 02a8 AC020000 		.4byte	0x2ac
+ 572 02ac 0F       		.uleb128 0xf
+ 573 02ad 04       		.byte	0x4
+ 574 02ae B2020000 		.4byte	0x2b2
+ 575 02b2 10       		.uleb128 0x10
+ 576 02b3 05       		.uleb128 0x5
+ 577 02b4 01       		.byte	0x1
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 14
+
+
+ 578 02b5 08       		.byte	0x8
+ 579 02b6 2E070000 		.4byte	.LASF69
+ 580 02ba 05       		.uleb128 0x5
+ 581 02bb 04       		.byte	0x4
+ 582 02bc 04       		.byte	0x4
+ 583 02bd 35050000 		.4byte	.LASF70
+ 584 02c1 05       		.uleb128 0x5
+ 585 02c2 08       		.byte	0x8
+ 586 02c3 04       		.byte	0x4
+ 587 02c4 99010000 		.4byte	.LASF71
+ 588 02c8 05       		.uleb128 0x5
+ 589 02c9 08       		.byte	0x8
+ 590 02ca 04       		.byte	0x4
+ 591 02cb 22070000 		.4byte	.LASF72
+ 592 02cf 02       		.uleb128 0x2
+ 593 02d0 04       		.byte	0x4
+ 594 02d1 87010000 		.4byte	0x187
+ 595 02d5 07       		.byte	0x7
+ 596 02d6 43       		.byte	0x43
+ 597 02d7 2A030000 		.4byte	0x32a
+ 598 02db 04       		.uleb128 0x4
+ 599 02dc AD020000 		.4byte	.LASF73
+ 600 02e0 00       		.byte	0
+ 601 02e1 11       		.uleb128 0x11
+ 602 02e2 5C020000 		.4byte	.LASF74
+ 603 02e6 01018A00 		.4byte	0x8a0101
+ 604 02ea 11       		.uleb128 0x11
+ 605 02eb 0E040000 		.4byte	.LASF75
+ 606 02ef 02018A00 		.4byte	0x8a0102
+ 607 02f3 11       		.uleb128 0x11
+ 608 02f4 1A080000 		.4byte	.LASF76
+ 609 02f8 03018A00 		.4byte	0x8a0103
+ 610 02fc 11       		.uleb128 0x11
+ 611 02fd 29040000 		.4byte	.LASF77
+ 612 0301 04018A00 		.4byte	0x8a0104
+ 613 0305 11       		.uleb128 0x11
+ 614 0306 00000000 		.4byte	.LASF78
+ 615 030a 02018800 		.4byte	0x880102
+ 616 030e 11       		.uleb128 0x11
+ 617 030f E2020000 		.4byte	.LASF79
+ 618 0313 03018800 		.4byte	0x880103
+ 619 0317 11       		.uleb128 0x11
+ 620 0318 8D030000 		.4byte	.LASF80
+ 621 031c 01018800 		.4byte	0x880101
+ 622 0320 11       		.uleb128 0x11
+ 623 0321 EB040000 		.4byte	.LASF81
+ 624 0325 00018800 		.4byte	0x880100
+ 625 0329 00       		.byte	0
+ 626 032a 06       		.uleb128 0x6
+ 627 032b FF050000 		.4byte	.LASF82
+ 628 032f 08       		.byte	0x8
+ 629 0330 3E       		.byte	0x3e
+ 630 0331 35030000 		.4byte	0x335
+ 631 0335 0F       		.uleb128 0xf
+ 632 0336 04       		.byte	0x4
+ 633 0337 3B030000 		.4byte	0x33b
+ 634 033b 12       		.uleb128 0x12
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 15
+
+
+ 635 033c 46030000 		.4byte	0x346
+ 636 0340 13       		.uleb128 0x13
+ 637 0341 46030000 		.4byte	0x346
+ 638 0345 00       		.byte	0
+ 639 0346 0F       		.uleb128 0xf
+ 640 0347 04       		.byte	0x4
+ 641 0348 A4010000 		.4byte	0x1a4
+ 642 034c 06       		.uleb128 0x6
+ 643 034d 73010000 		.4byte	.LASF83
+ 644 0351 08       		.byte	0x8
+ 645 0352 41       		.byte	0x41
+ 646 0353 AC020000 		.4byte	0x2ac
+ 647 0357 06       		.uleb128 0x6
+ 648 0358 04030000 		.4byte	.LASF84
+ 649 035c 08       		.byte	0x8
+ 650 035d 44       		.byte	0x44
+ 651 035e 62030000 		.4byte	0x362
+ 652 0362 0F       		.uleb128 0xf
+ 653 0363 04       		.byte	0x4
+ 654 0364 2A030000 		.4byte	0x32a
+ 655 0368 0C       		.uleb128 0xc
+ 656 0369 2C       		.byte	0x2c
+ 657 036a 08       		.byte	0x8
+ 658 036b 78       		.byte	0x78
+ 659 036c F5030000 		.4byte	0x3f5
+ 660 0370 0D       		.uleb128 0xd
+ 661 0371 91010000 		.4byte	.LASF85
+ 662 0375 08       		.byte	0x8
+ 663 0376 7A       		.byte	0x7a
+ 664 0377 A4010000 		.4byte	0x1a4
+ 665 037b 00       		.byte	0
+ 666 037c 0D       		.uleb128 0xd
+ 667 037d A4020000 		.4byte	.LASF86
+ 668 0381 08       		.byte	0x8
+ 669 0382 7B       		.byte	0x7b
+ 670 0383 A4010000 		.4byte	0x1a4
+ 671 0387 04       		.byte	0x4
+ 672 0388 0D       		.uleb128 0xd
+ 673 0389 B4040000 		.4byte	.LASF87
+ 674 038d 08       		.byte	0x8
+ 675 038e 7C       		.byte	0x7c
+ 676 038f A4010000 		.4byte	0x1a4
+ 677 0393 08       		.byte	0x8
+ 678 0394 0D       		.uleb128 0xd
+ 679 0395 AE070000 		.4byte	.LASF88
+ 680 0399 08       		.byte	0x8
+ 681 039a 7D       		.byte	0x7d
+ 682 039b 23010000 		.4byte	0x123
+ 683 039f 0C       		.byte	0xc
+ 684 03a0 0D       		.uleb128 0xd
+ 685 03a1 46030000 		.4byte	.LASF89
+ 686 03a5 08       		.byte	0x8
+ 687 03a6 7F       		.byte	0x7f
+ 688 03a7 F5030000 		.4byte	0x3f5
+ 689 03ab 10       		.byte	0x10
+ 690 03ac 0D       		.uleb128 0xd
+ 691 03ad 4D060000 		.4byte	.LASF90
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 16
+
+
+ 692 03b1 08       		.byte	0x8
+ 693 03b2 80       		.byte	0x80
+ 694 03b3 FB030000 		.4byte	0x3fb
+ 695 03b7 14       		.byte	0x14
+ 696 03b8 0D       		.uleb128 0xd
+ 697 03b9 EE070000 		.4byte	.LASF91
+ 698 03bd 08       		.byte	0x8
+ 699 03be 81       		.byte	0x81
+ 700 03bf A4010000 		.4byte	0x1a4
+ 701 03c3 18       		.byte	0x18
+ 702 03c4 0D       		.uleb128 0xd
+ 703 03c5 6E050000 		.4byte	.LASF92
+ 704 03c9 08       		.byte	0x8
+ 705 03ca 82       		.byte	0x82
+ 706 03cb A4010000 		.4byte	0x1a4
+ 707 03cf 1C       		.byte	0x1c
+ 708 03d0 0D       		.uleb128 0xd
+ 709 03d1 AE000000 		.4byte	.LASF93
+ 710 03d5 08       		.byte	0x8
+ 711 03d6 84       		.byte	0x84
+ 712 03d7 57030000 		.4byte	0x357
+ 713 03db 20       		.byte	0x20
+ 714 03dc 0D       		.uleb128 0xd
+ 715 03dd 07050000 		.4byte	.LASF94
+ 716 03e1 08       		.byte	0x8
+ 717 03e2 85       		.byte	0x85
+ 718 03e3 4C030000 		.4byte	0x34c
+ 719 03e7 24       		.byte	0x24
+ 720 03e8 0D       		.uleb128 0xd
+ 721 03e9 6E080000 		.4byte	.LASF95
+ 722 03ed 08       		.byte	0x8
+ 723 03ee 86       		.byte	0x86
+ 724 03ef 4C030000 		.4byte	0x34c
+ 725 03f3 28       		.byte	0x28
+ 726 03f4 00       		.byte	0
+ 727 03f5 0F       		.uleb128 0xf
+ 728 03f6 04       		.byte	0x4
+ 729 03f7 3B020000 		.4byte	0x23b
+ 730 03fb 0F       		.uleb128 0xf
+ 731 03fc 04       		.byte	0x4
+ 732 03fd 95020000 		.4byte	0x295
+ 733 0401 06       		.uleb128 0x6
+ 734 0402 73000000 		.4byte	.LASF96
+ 735 0406 08       		.byte	0x8
+ 736 0407 87       		.byte	0x87
+ 737 0408 68030000 		.4byte	0x368
+ 738 040c 0C       		.uleb128 0xc
+ 739 040d 14       		.byte	0x14
+ 740 040e 08       		.byte	0x8
+ 741 040f 8A       		.byte	0x8a
+ 742 0410 51040000 		.4byte	0x451
+ 743 0414 0D       		.uleb128 0xd
+ 744 0415 3C020000 		.4byte	.LASF97
+ 745 0419 08       		.byte	0x8
+ 746 041a 8C       		.byte	0x8c
+ 747 041b A4010000 		.4byte	0x1a4
+ 748 041f 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 17
+
+
+ 749 0420 0D       		.uleb128 0xd
+ 750 0421 FA030000 		.4byte	.LASF98
+ 751 0425 08       		.byte	0x8
+ 752 0426 8D       		.byte	0x8d
+ 753 0427 A4010000 		.4byte	0x1a4
+ 754 042b 04       		.byte	0x4
+ 755 042c 0D       		.uleb128 0xd
+ 756 042d 74060000 		.4byte	.LASF99
+ 757 0431 08       		.byte	0x8
+ 758 0432 8E       		.byte	0x8e
+ 759 0433 A4010000 		.4byte	0x1a4
+ 760 0437 08       		.byte	0x8
+ 761 0438 0D       		.uleb128 0xd
+ 762 0439 40080000 		.4byte	.LASF100
+ 763 043d 08       		.byte	0x8
+ 764 043e 90       		.byte	0x90
+ 765 043f A4010000 		.4byte	0x1a4
+ 766 0443 0C       		.byte	0xc
+ 767 0444 0D       		.uleb128 0xd
+ 768 0445 95050000 		.4byte	.LASF101
+ 769 0449 08       		.byte	0x8
+ 770 044a 91       		.byte	0x91
+ 771 044b A4010000 		.4byte	0x1a4
+ 772 044f 10       		.byte	0x10
+ 773 0450 00       		.byte	0
+ 774 0451 06       		.uleb128 0x6
+ 775 0452 E3050000 		.4byte	.LASF102
+ 776 0456 08       		.byte	0x8
+ 777 0457 93       		.byte	0x93
+ 778 0458 0C040000 		.4byte	0x40c
+ 779 045c 0C       		.uleb128 0xc
+ 780 045d 34       		.byte	0x34
+ 781 045e 08       		.byte	0x8
+ 782 045f 96       		.byte	0x96
+ 783 0460 A1040000 		.4byte	0x4a1
+ 784 0464 0D       		.uleb128 0xd
+ 785 0465 07090000 		.4byte	.LASF103
+ 786 0469 08       		.byte	0x8
+ 787 046a 99       		.byte	0x99
+ 788 046b 51040000 		.4byte	0x451
+ 789 046f 00       		.byte	0
+ 790 0470 0D       		.uleb128 0xd
+ 791 0471 F9000000 		.4byte	.LASF104
+ 792 0475 08       		.byte	0x8
+ 793 0476 9C       		.byte	0x9c
+ 794 0477 51040000 		.4byte	0x451
+ 795 047b 14       		.byte	0x14
+ 796 047c 0D       		.uleb128 0xd
+ 797 047d 38010000 		.4byte	.LASF105
+ 798 0481 08       		.byte	0x8
+ 799 0482 9F       		.byte	0x9f
+ 800 0483 A4010000 		.4byte	0x1a4
+ 801 0487 28       		.byte	0x28
+ 802 0488 0D       		.uleb128 0xd
+ 803 0489 C6030000 		.4byte	.LASF106
+ 804 048d 08       		.byte	0x8
+ 805 048e A2       		.byte	0xa2
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 18
+
+
+ 806 048f 57030000 		.4byte	0x357
+ 807 0493 2C       		.byte	0x2c
+ 808 0494 0D       		.uleb128 0xd
+ 809 0495 88080000 		.4byte	.LASF107
+ 810 0499 08       		.byte	0x8
+ 811 049a A5       		.byte	0xa5
+ 812 049b A0020000 		.4byte	0x2a0
+ 813 049f 30       		.byte	0x30
+ 814 04a0 00       		.byte	0
+ 815 04a1 06       		.uleb128 0x6
+ 816 04a2 4D030000 		.4byte	.LASF108
+ 817 04a6 08       		.byte	0x8
+ 818 04a7 A6       		.byte	0xa6
+ 819 04a8 5C040000 		.4byte	0x45c
+ 820 04ac 05       		.uleb128 0x5
+ 821 04ad 01       		.byte	0x1
+ 822 04ae 02       		.byte	0x2
+ 823 04af 68050000 		.4byte	.LASF109
+ 824 04b3 14       		.uleb128 0x14
+ 825 04b4 C0040000 		.4byte	.LASF135
+ 826 04b8 04       		.byte	0x4
+ 827 04b9 09       		.byte	0x9
+ 828 04ba 1801     		.2byte	0x118
+ 829 04bc E8040000 		.4byte	0x4e8
+ 830 04c0 15       		.uleb128 0x15
+ 831 04c1 6A000000 		.4byte	.LASF110
+ 832 04c5 09       		.byte	0x9
+ 833 04c6 1A01     		.2byte	0x11a
+ 834 04c8 8E010000 		.4byte	0x18e
+ 835 04cc 00       		.byte	0
+ 836 04cd 15       		.uleb128 0x15
+ 837 04ce 4A050000 		.4byte	.LASF111
+ 838 04d2 09       		.byte	0x9
+ 839 04d3 1B01     		.2byte	0x11b
+ 840 04d5 8E010000 		.4byte	0x18e
+ 841 04d9 01       		.byte	0x1
+ 842 04da 15       		.uleb128 0x15
+ 843 04db B9050000 		.4byte	.LASF112
+ 844 04df 09       		.byte	0x9
+ 845 04e0 1C01     		.2byte	0x11c
+ 846 04e2 99010000 		.4byte	0x199
+ 847 04e6 02       		.byte	0x2
+ 848 04e7 00       		.byte	0
+ 849 04e8 0E       		.uleb128 0xe
+ 850 04e9 1A060000 		.4byte	.LASF113
+ 851 04ed 09       		.byte	0x9
+ 852 04ee 1D01     		.2byte	0x11d
+ 853 04f0 B3040000 		.4byte	0x4b3
+ 854 04f4 16       		.uleb128 0x16
+ 855 04f5 E2000000 		.4byte	.LASF136
+ 856 04f9 01       		.byte	0x1
+ 857 04fa 78       		.byte	0x78
+ 858 04fb 00000000 		.4byte	.LFB144
+ 859 04ff 30000000 		.4byte	.LFE144-.LFB144
+ 860 0503 01       		.uleb128 0x1
+ 861 0504 9C       		.byte	0x9c
+ 862 0505 7B050000 		.4byte	0x57b
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 19
+
+
+ 863 0509 17       		.uleb128 0x17
+ 864 050a 52050000 		.4byte	.LASF137
+ 865 050e 01       		.byte	0x1
+ 866 050f 78       		.byte	0x78
+ 867 0510 46030000 		.4byte	0x346
+ 868 0514 00000000 		.4byte	.LLST0
+ 869 0518 18       		.uleb128 0x18
+ 870 0519 AF040000 		.4byte	.LASF114
+ 871 051d 01       		.byte	0x1
+ 872 051e 7A       		.byte	0x7a
+ 873 051f A4010000 		.4byte	0x1a4
+ 874 0523 21000000 		.4byte	.LLST1
+ 875 0527 18       		.uleb128 0x18
+ 876 0528 75020000 		.4byte	.LASF115
+ 877 052c 01       		.byte	0x1
+ 878 052d 7C       		.byte	0x7c
+ 879 052e 7B050000 		.4byte	0x57b
+ 880 0532 3F000000 		.4byte	.LLST2
+ 881 0536 19       		.uleb128 0x19
+ 882 0537 0C000000 		.4byte	.LVL2
+ 883 053b E4060000 		.4byte	0x6e4
+ 884 053f 1A       		.uleb128 0x1a
+ 885 0540 16000000 		.4byte	.LVL5
+ 886 0544 F0060000 		.4byte	0x6f0
+ 887 0548 57050000 		.4byte	0x557
+ 888 054c 1B       		.uleb128 0x1b
+ 889 054d 01       		.uleb128 0x1
+ 890 054e 50       		.byte	0x50
+ 891 054f 01       		.uleb128 0x1
+ 892 0550 30       		.byte	0x30
+ 893 0551 1B       		.uleb128 0x1b
+ 894 0552 01       		.uleb128 0x1
+ 895 0553 51       		.byte	0x51
+ 896 0554 01       		.uleb128 0x1
+ 897 0555 31       		.byte	0x31
+ 898 0556 00       		.byte	0
+ 899 0557 1A       		.uleb128 0x1a
+ 900 0558 1C000000 		.4byte	.LVL6
+ 901 055c FB060000 		.4byte	0x6fb
+ 902 0560 6A050000 		.4byte	0x56a
+ 903 0564 1B       		.uleb128 0x1b
+ 904 0565 01       		.uleb128 0x1
+ 905 0566 50       		.byte	0x50
+ 906 0567 01       		.uleb128 0x1
+ 907 0568 30       		.byte	0x30
+ 908 0569 00       		.byte	0
+ 909 056a 1C       		.uleb128 0x1c
+ 910 056b 28000000 		.4byte	.LVL7
+ 911 056f 06070000 		.4byte	0x706
+ 912 0573 1B       		.uleb128 0x1b
+ 913 0574 01       		.uleb128 0x1
+ 914 0575 50       		.byte	0x50
+ 915 0576 02       		.uleb128 0x2
+ 916 0577 74       		.byte	0x74
+ 917 0578 00       		.sleb128 0
+ 918 0579 00       		.byte	0
+ 919 057a 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 20
+
+
+ 920 057b 0F       		.uleb128 0xf
+ 921 057c 04       		.byte	0x4
+ 922 057d E8040000 		.4byte	0x4e8
+ 923 0581 1D       		.uleb128 0x1d
+ 924 0582 6A040000 		.4byte	.LASF116
+ 925 0586 01       		.byte	0x1
+ 926 0587 67       		.byte	0x67
+ 927 0588 00000000 		.4byte	.LFB143
+ 928 058c 10000000 		.4byte	.LFE143-.LFB143
+ 929 0590 01       		.uleb128 0x1
+ 930 0591 9C       		.byte	0x9c
+ 931 0592 AA050000 		.4byte	0x5aa
+ 932 0596 1C       		.uleb128 0x1c
+ 933 0597 08000000 		.4byte	.LVL8
+ 934 059b 12070000 		.4byte	0x712
+ 935 059f 1B       		.uleb128 0x1b
+ 936 05a0 01       		.uleb128 0x1
+ 937 05a1 50       		.byte	0x50
+ 938 05a2 05       		.uleb128 0x5
+ 939 05a3 03       		.byte	0x3
+ 940 05a4 00000000 		.4byte	.LANCHOR0
+ 941 05a8 00       		.byte	0
+ 942 05a9 00       		.byte	0
+ 943 05aa 1D       		.uleb128 0x1d
+ 944 05ab 58080000 		.4byte	.LASF117
+ 945 05af 01       		.byte	0x1
+ 946 05b0 3A       		.byte	0x3a
+ 947 05b1 00000000 		.4byte	.LFB141
+ 948 05b5 14000000 		.4byte	.LFE141-.LFB141
+ 949 05b9 01       		.uleb128 0x1
+ 950 05ba 9C       		.byte	0x9c
+ 951 05bb EF050000 		.4byte	0x5ef
+ 952 05bf 1E       		.uleb128 0x1e
+ 953 05c0 88050000 		.4byte	.LASF118
+ 954 05c4 01       		.byte	0x1
+ 955 05c5 40       		.byte	0x40
+ 956 05c6 EF050000 		.4byte	0x5ef
+ 957 05ca 05       		.uleb128 0x5
+ 958 05cb 03       		.byte	0x3
+ 959 05cc 60010000 		.4byte	ipcSemaArray.10228
+ 960 05d0 1C       		.uleb128 0x1c
+ 961 05d1 0E000000 		.4byte	.LVL9
+ 962 05d5 1D070000 		.4byte	0x71d
+ 963 05d9 1B       		.uleb128 0x1b
+ 964 05da 01       		.uleb128 0x1
+ 965 05db 50       		.byte	0x50
+ 966 05dc 01       		.uleb128 0x1
+ 967 05dd 34       		.byte	0x34
+ 968 05de 1B       		.uleb128 0x1b
+ 969 05df 01       		.uleb128 0x1
+ 970 05e0 51       		.byte	0x51
+ 971 05e1 02       		.uleb128 0x2
+ 972 05e2 08       		.byte	0x8
+ 973 05e3 80       		.byte	0x80
+ 974 05e4 1B       		.uleb128 0x1b
+ 975 05e5 01       		.uleb128 0x1
+ 976 05e6 52       		.byte	0x52
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 21
+
+
+ 977 05e7 05       		.uleb128 0x5
+ 978 05e8 03       		.byte	0x3
+ 979 05e9 60010000 		.4byte	.LANCHOR1+96
+ 980 05ed 00       		.byte	0
+ 981 05ee 00       		.byte	0
+ 982 05ef 0A       		.uleb128 0xa
+ 983 05f0 A4010000 		.4byte	0x1a4
+ 984 05f4 FF050000 		.4byte	0x5ff
+ 985 05f8 0B       		.uleb128 0xb
+ 986 05f9 AF010000 		.4byte	0x1af
+ 987 05fd 03       		.byte	0x3
+ 988 05fe 00       		.byte	0
+ 989 05ff 1D       		.uleb128 0x1d
+ 990 0600 42070000 		.4byte	.LASF119
+ 991 0604 01       		.byte	0x1
+ 992 0605 4D       		.byte	0x4d
+ 993 0606 00000000 		.4byte	.LFB142
+ 994 060a 34000000 		.4byte	.LFE142-.LFB142
+ 995 060e 01       		.uleb128 0x1
+ 996 060f 9C       		.byte	0x9c
+ 997 0610 AE060000 		.4byte	0x6ae
+ 998 0614 18       		.uleb128 0x18
+ 999 0615 AF040000 		.4byte	.LASF114
+ 1000 0619 01       		.byte	0x1
+ 1001 061a 4F       		.byte	0x4f
+ 1002 061b A4010000 		.4byte	0x1a4
+ 1003 061f 60000000 		.4byte	.LLST3
+ 1004 0623 1E       		.uleb128 0x1e
+ 1005 0624 BC000000 		.4byte	.LASF120
+ 1006 0628 01       		.byte	0x1
+ 1007 0629 53       		.byte	0x53
+ 1008 062a AE060000 		.4byte	0x6ae
+ 1009 062e 05       		.uleb128 0x5
+ 1010 062f 03       		.byte	0x3
+ 1011 0630 70010000 		.4byte	cy_ipc_pipe_sysCbArray.10233
+ 1012 0634 1E       		.uleb128 0x1e
+ 1013 0635 B3010000 		.4byte	.LASF121
+ 1014 0639 01       		.byte	0x1
+ 1015 063a 55       		.byte	0x55
+ 1016 063b BE060000 		.4byte	0x6be
+ 1017 063f 05       		.uleb128 0x5
+ 1018 0640 03       		.byte	0x3
+ 1019 0641 00000000 		.4byte	systemPipeConfig.10234
+ 1020 0645 19       		.uleb128 0x19
+ 1021 0646 06000000 		.4byte	.LVL10
+ 1022 064a E4060000 		.4byte	0x6e4
+ 1023 064e 1A       		.uleb128 0x1a
+ 1024 064f 0E000000 		.4byte	.LVL13
+ 1025 0653 28070000 		.4byte	0x728
+ 1026 0657 65060000 		.4byte	0x665
+ 1027 065b 1B       		.uleb128 0x1b
+ 1028 065c 01       		.uleb128 0x1
+ 1029 065d 50       		.byte	0x50
+ 1030 065e 05       		.uleb128 0x5
+ 1031 065f 03       		.byte	0x3
+ 1032 0660 00000000 		.4byte	.LANCHOR0
+ 1033 0664 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 22
+
+
+ 1034 0665 1A       		.uleb128 0x1a
+ 1035 0666 14000000 		.4byte	.LVL14
+ 1036 066a 33070000 		.4byte	0x733
+ 1037 066e 7C060000 		.4byte	0x67c
+ 1038 0672 1B       		.uleb128 0x1b
+ 1039 0673 01       		.uleb128 0x1
+ 1040 0674 50       		.byte	0x50
+ 1041 0675 05       		.uleb128 0x5
+ 1042 0676 03       		.byte	0x3
+ 1043 0677 00000000 		.4byte	.LANCHOR2
+ 1044 067b 00       		.byte	0
+ 1045 067c 1A       		.uleb128 0x1a
+ 1046 067d 1E000000 		.4byte	.LVL15
+ 1047 0681 3E070000 		.4byte	0x73e
+ 1048 0685 9D060000 		.4byte	0x69d
+ 1049 0689 1B       		.uleb128 0x1b
+ 1050 068a 01       		.uleb128 0x1
+ 1051 068b 50       		.byte	0x50
+ 1052 068c 01       		.uleb128 0x1
+ 1053 068d 30       		.byte	0x30
+ 1054 068e 1B       		.uleb128 0x1b
+ 1055 068f 01       		.uleb128 0x1
+ 1056 0690 51       		.byte	0x51
+ 1057 0691 05       		.uleb128 0x5
+ 1058 0692 03       		.byte	0x3
+ 1059 0693 00000000 		.4byte	Cy_Flash_NotifyHandler
+ 1060 0697 1B       		.uleb128 0x1b
+ 1061 0698 01       		.uleb128 0x1
+ 1062 0699 52       		.byte	0x52
+ 1063 069a 01       		.uleb128 0x1
+ 1064 069b 32       		.byte	0x32
+ 1065 069c 00       		.byte	0
+ 1066 069d 1C       		.uleb128 0x1c
+ 1067 069e 24000000 		.4byte	.LVL16
+ 1068 06a2 06070000 		.4byte	0x706
+ 1069 06a6 1B       		.uleb128 0x1b
+ 1070 06a7 01       		.uleb128 0x1
+ 1071 06a8 50       		.byte	0x50
+ 1072 06a9 02       		.uleb128 0x2
+ 1073 06aa 74       		.byte	0x74
+ 1074 06ab 00       		.sleb128 0
+ 1075 06ac 00       		.byte	0
+ 1076 06ad 00       		.byte	0
+ 1077 06ae 0A       		.uleb128 0xa
+ 1078 06af 2A030000 		.4byte	0x32a
+ 1079 06b3 BE060000 		.4byte	0x6be
+ 1080 06b7 0B       		.uleb128 0xb
+ 1081 06b8 AF010000 		.4byte	0x1af
+ 1082 06bc 07       		.byte	0x7
+ 1083 06bd 00       		.byte	0
+ 1084 06be 09       		.uleb128 0x9
+ 1085 06bf A1040000 		.4byte	0x4a1
+ 1086 06c3 0A       		.uleb128 0xa
+ 1087 06c4 01040000 		.4byte	0x401
+ 1088 06c8 D3060000 		.4byte	0x6d3
+ 1089 06cc 0B       		.uleb128 0xb
+ 1090 06cd AF010000 		.4byte	0x1af
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 23
+
+
+ 1091 06d1 07       		.byte	0x7
+ 1092 06d2 00       		.byte	0
+ 1093 06d3 1E       		.uleb128 0x1e
+ 1094 06d4 4B000000 		.4byte	.LASF122
+ 1095 06d8 01       		.byte	0x1
+ 1096 06d9 1C       		.byte	0x1c
+ 1097 06da C3060000 		.4byte	0x6c3
+ 1098 06de 05       		.uleb128 0x5
+ 1099 06df 03       		.byte	0x3
+ 1100 06e0 00000000 		.4byte	cy_ipc_pipe_sysEpArray
+ 1101 06e4 1F       		.uleb128 0x1f
+ 1102 06e5 A7030000 		.4byte	.LASF123
+ 1103 06e9 A7030000 		.4byte	.LASF123
+ 1104 06ed 06       		.byte	0x6
+ 1105 06ee 2D03     		.2byte	0x32d
+ 1106 06f0 20       		.uleb128 0x20
+ 1107 06f1 9B080000 		.4byte	.LASF124
+ 1108 06f5 9B080000 		.4byte	.LASF124
+ 1109 06f9 07       		.byte	0x7
+ 1110 06fa 66       		.byte	0x66
+ 1111 06fb 20       		.uleb128 0x20
+ 1112 06fc 61060000 		.4byte	.LASF125
+ 1113 0700 61060000 		.4byte	.LASF125
+ 1114 0704 07       		.byte	0x7
+ 1115 0705 68       		.byte	0x68
+ 1116 0706 1F       		.uleb128 0x1f
+ 1117 0707 D0010000 		.4byte	.LASF126
+ 1118 070b D0010000 		.4byte	.LASF126
+ 1119 070f 06       		.byte	0x6
+ 1120 0710 3C03     		.2byte	0x33c
+ 1121 0712 20       		.uleb128 0x20
+ 1122 0713 0C020000 		.4byte	.LASF127
+ 1123 0717 0C020000 		.4byte	.LASF127
+ 1124 071b 08       		.byte	0x8
+ 1125 071c FA       		.byte	0xfa
+ 1126 071d 20       		.uleb128 0x20
+ 1127 071e 7C030000 		.4byte	.LASF128
+ 1128 0722 7C030000 		.4byte	.LASF128
+ 1129 0726 07       		.byte	0x7
+ 1130 0727 65       		.byte	0x65
+ 1131 0728 20       		.uleb128 0x20
+ 1132 0729 A0010000 		.4byte	.LASF129
+ 1133 072d A0010000 		.4byte	.LASF129
+ 1134 0731 08       		.byte	0x8
+ 1135 0732 FC       		.byte	0xfc
+ 1136 0733 20       		.uleb128 0x20
+ 1137 0734 66030000 		.4byte	.LASF130
+ 1138 0738 66030000 		.4byte	.LASF130
+ 1139 073c 08       		.byte	0x8
+ 1140 073d FD       		.byte	0xfd
+ 1141 073e 20       		.uleb128 0x20
+ 1142 073f 22060000 		.4byte	.LASF131
+ 1143 0743 22060000 		.4byte	.LASF131
+ 1144 0747 08       		.byte	0x8
+ 1145 0748 F8       		.byte	0xf8
+ 1146 0749 00       		.byte	0
+ 1147              		.section	.debug_abbrev,"",%progbits
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 24
+
+
+ 1148              	.Ldebug_abbrev0:
+ 1149 0000 01       		.uleb128 0x1
+ 1150 0001 11       		.uleb128 0x11
+ 1151 0002 01       		.byte	0x1
+ 1152 0003 25       		.uleb128 0x25
+ 1153 0004 0E       		.uleb128 0xe
+ 1154 0005 13       		.uleb128 0x13
+ 1155 0006 0B       		.uleb128 0xb
+ 1156 0007 03       		.uleb128 0x3
+ 1157 0008 0E       		.uleb128 0xe
+ 1158 0009 1B       		.uleb128 0x1b
+ 1159 000a 0E       		.uleb128 0xe
+ 1160 000b 55       		.uleb128 0x55
+ 1161 000c 17       		.uleb128 0x17
+ 1162 000d 11       		.uleb128 0x11
+ 1163 000e 01       		.uleb128 0x1
+ 1164 000f 10       		.uleb128 0x10
+ 1165 0010 17       		.uleb128 0x17
+ 1166 0011 00       		.byte	0
+ 1167 0012 00       		.byte	0
+ 1168 0013 02       		.uleb128 0x2
+ 1169 0014 04       		.uleb128 0x4
+ 1170 0015 01       		.byte	0x1
+ 1171 0016 0B       		.uleb128 0xb
+ 1172 0017 0B       		.uleb128 0xb
+ 1173 0018 49       		.uleb128 0x49
+ 1174 0019 13       		.uleb128 0x13
+ 1175 001a 3A       		.uleb128 0x3a
+ 1176 001b 0B       		.uleb128 0xb
+ 1177 001c 3B       		.uleb128 0x3b
+ 1178 001d 0B       		.uleb128 0xb
+ 1179 001e 01       		.uleb128 0x1
+ 1180 001f 13       		.uleb128 0x13
+ 1181 0020 00       		.byte	0
+ 1182 0021 00       		.byte	0
+ 1183 0022 03       		.uleb128 0x3
+ 1184 0023 28       		.uleb128 0x28
+ 1185 0024 00       		.byte	0
+ 1186 0025 03       		.uleb128 0x3
+ 1187 0026 0E       		.uleb128 0xe
+ 1188 0027 1C       		.uleb128 0x1c
+ 1189 0028 0D       		.uleb128 0xd
+ 1190 0029 00       		.byte	0
+ 1191 002a 00       		.byte	0
+ 1192 002b 04       		.uleb128 0x4
+ 1193 002c 28       		.uleb128 0x28
+ 1194 002d 00       		.byte	0
+ 1195 002e 03       		.uleb128 0x3
+ 1196 002f 0E       		.uleb128 0xe
+ 1197 0030 1C       		.uleb128 0x1c
+ 1198 0031 0B       		.uleb128 0xb
+ 1199 0032 00       		.byte	0
+ 1200 0033 00       		.byte	0
+ 1201 0034 05       		.uleb128 0x5
+ 1202 0035 24       		.uleb128 0x24
+ 1203 0036 00       		.byte	0
+ 1204 0037 0B       		.uleb128 0xb
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 25
+
+
+ 1205 0038 0B       		.uleb128 0xb
+ 1206 0039 3E       		.uleb128 0x3e
+ 1207 003a 0B       		.uleb128 0xb
+ 1208 003b 03       		.uleb128 0x3
+ 1209 003c 0E       		.uleb128 0xe
+ 1210 003d 00       		.byte	0
+ 1211 003e 00       		.byte	0
+ 1212 003f 06       		.uleb128 0x6
+ 1213 0040 16       		.uleb128 0x16
+ 1214 0041 00       		.byte	0
+ 1215 0042 03       		.uleb128 0x3
+ 1216 0043 0E       		.uleb128 0xe
+ 1217 0044 3A       		.uleb128 0x3a
+ 1218 0045 0B       		.uleb128 0xb
+ 1219 0046 3B       		.uleb128 0x3b
+ 1220 0047 0B       		.uleb128 0xb
+ 1221 0048 49       		.uleb128 0x49
+ 1222 0049 13       		.uleb128 0x13
+ 1223 004a 00       		.byte	0
+ 1224 004b 00       		.byte	0
+ 1225 004c 07       		.uleb128 0x7
+ 1226 004d 24       		.uleb128 0x24
+ 1227 004e 00       		.byte	0
+ 1228 004f 0B       		.uleb128 0xb
+ 1229 0050 0B       		.uleb128 0xb
+ 1230 0051 3E       		.uleb128 0x3e
+ 1231 0052 0B       		.uleb128 0xb
+ 1232 0053 03       		.uleb128 0x3
+ 1233 0054 08       		.uleb128 0x8
+ 1234 0055 00       		.byte	0
+ 1235 0056 00       		.byte	0
+ 1236 0057 08       		.uleb128 0x8
+ 1237 0058 35       		.uleb128 0x35
+ 1238 0059 00       		.byte	0
+ 1239 005a 49       		.uleb128 0x49
+ 1240 005b 13       		.uleb128 0x13
+ 1241 005c 00       		.byte	0
+ 1242 005d 00       		.byte	0
+ 1243 005e 09       		.uleb128 0x9
+ 1244 005f 26       		.uleb128 0x26
+ 1245 0060 00       		.byte	0
+ 1246 0061 49       		.uleb128 0x49
+ 1247 0062 13       		.uleb128 0x13
+ 1248 0063 00       		.byte	0
+ 1249 0064 00       		.byte	0
+ 1250 0065 0A       		.uleb128 0xa
+ 1251 0066 01       		.uleb128 0x1
+ 1252 0067 01       		.byte	0x1
+ 1253 0068 49       		.uleb128 0x49
+ 1254 0069 13       		.uleb128 0x13
+ 1255 006a 01       		.uleb128 0x1
+ 1256 006b 13       		.uleb128 0x13
+ 1257 006c 00       		.byte	0
+ 1258 006d 00       		.byte	0
+ 1259 006e 0B       		.uleb128 0xb
+ 1260 006f 21       		.uleb128 0x21
+ 1261 0070 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 26
+
+
+ 1262 0071 49       		.uleb128 0x49
+ 1263 0072 13       		.uleb128 0x13
+ 1264 0073 2F       		.uleb128 0x2f
+ 1265 0074 0B       		.uleb128 0xb
+ 1266 0075 00       		.byte	0
+ 1267 0076 00       		.byte	0
+ 1268 0077 0C       		.uleb128 0xc
+ 1269 0078 13       		.uleb128 0x13
+ 1270 0079 01       		.byte	0x1
+ 1271 007a 0B       		.uleb128 0xb
+ 1272 007b 0B       		.uleb128 0xb
+ 1273 007c 3A       		.uleb128 0x3a
+ 1274 007d 0B       		.uleb128 0xb
+ 1275 007e 3B       		.uleb128 0x3b
+ 1276 007f 0B       		.uleb128 0xb
+ 1277 0080 01       		.uleb128 0x1
+ 1278 0081 13       		.uleb128 0x13
+ 1279 0082 00       		.byte	0
+ 1280 0083 00       		.byte	0
+ 1281 0084 0D       		.uleb128 0xd
+ 1282 0085 0D       		.uleb128 0xd
+ 1283 0086 00       		.byte	0
+ 1284 0087 03       		.uleb128 0x3
+ 1285 0088 0E       		.uleb128 0xe
+ 1286 0089 3A       		.uleb128 0x3a
+ 1287 008a 0B       		.uleb128 0xb
+ 1288 008b 3B       		.uleb128 0x3b
+ 1289 008c 0B       		.uleb128 0xb
+ 1290 008d 49       		.uleb128 0x49
+ 1291 008e 13       		.uleb128 0x13
+ 1292 008f 38       		.uleb128 0x38
+ 1293 0090 0B       		.uleb128 0xb
+ 1294 0091 00       		.byte	0
+ 1295 0092 00       		.byte	0
+ 1296 0093 0E       		.uleb128 0xe
+ 1297 0094 16       		.uleb128 0x16
+ 1298 0095 00       		.byte	0
+ 1299 0096 03       		.uleb128 0x3
+ 1300 0097 0E       		.uleb128 0xe
+ 1301 0098 3A       		.uleb128 0x3a
+ 1302 0099 0B       		.uleb128 0xb
+ 1303 009a 3B       		.uleb128 0x3b
+ 1304 009b 05       		.uleb128 0x5
+ 1305 009c 49       		.uleb128 0x49
+ 1306 009d 13       		.uleb128 0x13
+ 1307 009e 00       		.byte	0
+ 1308 009f 00       		.byte	0
+ 1309 00a0 0F       		.uleb128 0xf
+ 1310 00a1 0F       		.uleb128 0xf
+ 1311 00a2 00       		.byte	0
+ 1312 00a3 0B       		.uleb128 0xb
+ 1313 00a4 0B       		.uleb128 0xb
+ 1314 00a5 49       		.uleb128 0x49
+ 1315 00a6 13       		.uleb128 0x13
+ 1316 00a7 00       		.byte	0
+ 1317 00a8 00       		.byte	0
+ 1318 00a9 10       		.uleb128 0x10
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 27
+
+
+ 1319 00aa 15       		.uleb128 0x15
+ 1320 00ab 00       		.byte	0
+ 1321 00ac 27       		.uleb128 0x27
+ 1322 00ad 19       		.uleb128 0x19
+ 1323 00ae 00       		.byte	0
+ 1324 00af 00       		.byte	0
+ 1325 00b0 11       		.uleb128 0x11
+ 1326 00b1 28       		.uleb128 0x28
+ 1327 00b2 00       		.byte	0
+ 1328 00b3 03       		.uleb128 0x3
+ 1329 00b4 0E       		.uleb128 0xe
+ 1330 00b5 1C       		.uleb128 0x1c
+ 1331 00b6 06       		.uleb128 0x6
+ 1332 00b7 00       		.byte	0
+ 1333 00b8 00       		.byte	0
+ 1334 00b9 12       		.uleb128 0x12
+ 1335 00ba 15       		.uleb128 0x15
+ 1336 00bb 01       		.byte	0x1
+ 1337 00bc 27       		.uleb128 0x27
+ 1338 00bd 19       		.uleb128 0x19
+ 1339 00be 01       		.uleb128 0x1
+ 1340 00bf 13       		.uleb128 0x13
+ 1341 00c0 00       		.byte	0
+ 1342 00c1 00       		.byte	0
+ 1343 00c2 13       		.uleb128 0x13
+ 1344 00c3 05       		.uleb128 0x5
+ 1345 00c4 00       		.byte	0
+ 1346 00c5 49       		.uleb128 0x49
+ 1347 00c6 13       		.uleb128 0x13
+ 1348 00c7 00       		.byte	0
+ 1349 00c8 00       		.byte	0
+ 1350 00c9 14       		.uleb128 0x14
+ 1351 00ca 13       		.uleb128 0x13
+ 1352 00cb 01       		.byte	0x1
+ 1353 00cc 03       		.uleb128 0x3
+ 1354 00cd 0E       		.uleb128 0xe
+ 1355 00ce 0B       		.uleb128 0xb
+ 1356 00cf 0B       		.uleb128 0xb
+ 1357 00d0 3A       		.uleb128 0x3a
+ 1358 00d1 0B       		.uleb128 0xb
+ 1359 00d2 3B       		.uleb128 0x3b
+ 1360 00d3 05       		.uleb128 0x5
+ 1361 00d4 01       		.uleb128 0x1
+ 1362 00d5 13       		.uleb128 0x13
+ 1363 00d6 00       		.byte	0
+ 1364 00d7 00       		.byte	0
+ 1365 00d8 15       		.uleb128 0x15
+ 1366 00d9 0D       		.uleb128 0xd
+ 1367 00da 00       		.byte	0
+ 1368 00db 03       		.uleb128 0x3
+ 1369 00dc 0E       		.uleb128 0xe
+ 1370 00dd 3A       		.uleb128 0x3a
+ 1371 00de 0B       		.uleb128 0xb
+ 1372 00df 3B       		.uleb128 0x3b
+ 1373 00e0 05       		.uleb128 0x5
+ 1374 00e1 49       		.uleb128 0x49
+ 1375 00e2 13       		.uleb128 0x13
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 28
+
+
+ 1376 00e3 38       		.uleb128 0x38
+ 1377 00e4 0B       		.uleb128 0xb
+ 1378 00e5 00       		.byte	0
+ 1379 00e6 00       		.byte	0
+ 1380 00e7 16       		.uleb128 0x16
+ 1381 00e8 2E       		.uleb128 0x2e
+ 1382 00e9 01       		.byte	0x1
+ 1383 00ea 03       		.uleb128 0x3
+ 1384 00eb 0E       		.uleb128 0xe
+ 1385 00ec 3A       		.uleb128 0x3a
+ 1386 00ed 0B       		.uleb128 0xb
+ 1387 00ee 3B       		.uleb128 0x3b
+ 1388 00ef 0B       		.uleb128 0xb
+ 1389 00f0 27       		.uleb128 0x27
+ 1390 00f1 19       		.uleb128 0x19
+ 1391 00f2 11       		.uleb128 0x11
+ 1392 00f3 01       		.uleb128 0x1
+ 1393 00f4 12       		.uleb128 0x12
+ 1394 00f5 06       		.uleb128 0x6
+ 1395 00f6 40       		.uleb128 0x40
+ 1396 00f7 18       		.uleb128 0x18
+ 1397 00f8 9742     		.uleb128 0x2117
+ 1398 00fa 19       		.uleb128 0x19
+ 1399 00fb 01       		.uleb128 0x1
+ 1400 00fc 13       		.uleb128 0x13
+ 1401 00fd 00       		.byte	0
+ 1402 00fe 00       		.byte	0
+ 1403 00ff 17       		.uleb128 0x17
+ 1404 0100 05       		.uleb128 0x5
+ 1405 0101 00       		.byte	0
+ 1406 0102 03       		.uleb128 0x3
+ 1407 0103 0E       		.uleb128 0xe
+ 1408 0104 3A       		.uleb128 0x3a
+ 1409 0105 0B       		.uleb128 0xb
+ 1410 0106 3B       		.uleb128 0x3b
+ 1411 0107 0B       		.uleb128 0xb
+ 1412 0108 49       		.uleb128 0x49
+ 1413 0109 13       		.uleb128 0x13
+ 1414 010a 02       		.uleb128 0x2
+ 1415 010b 17       		.uleb128 0x17
+ 1416 010c 00       		.byte	0
+ 1417 010d 00       		.byte	0
+ 1418 010e 18       		.uleb128 0x18
+ 1419 010f 34       		.uleb128 0x34
+ 1420 0110 00       		.byte	0
+ 1421 0111 03       		.uleb128 0x3
+ 1422 0112 0E       		.uleb128 0xe
+ 1423 0113 3A       		.uleb128 0x3a
+ 1424 0114 0B       		.uleb128 0xb
+ 1425 0115 3B       		.uleb128 0x3b
+ 1426 0116 0B       		.uleb128 0xb
+ 1427 0117 49       		.uleb128 0x49
+ 1428 0118 13       		.uleb128 0x13
+ 1429 0119 02       		.uleb128 0x2
+ 1430 011a 17       		.uleb128 0x17
+ 1431 011b 00       		.byte	0
+ 1432 011c 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 29
+
+
+ 1433 011d 19       		.uleb128 0x19
+ 1434 011e 898201   		.uleb128 0x4109
+ 1435 0121 00       		.byte	0
+ 1436 0122 11       		.uleb128 0x11
+ 1437 0123 01       		.uleb128 0x1
+ 1438 0124 31       		.uleb128 0x31
+ 1439 0125 13       		.uleb128 0x13
+ 1440 0126 00       		.byte	0
+ 1441 0127 00       		.byte	0
+ 1442 0128 1A       		.uleb128 0x1a
+ 1443 0129 898201   		.uleb128 0x4109
+ 1444 012c 01       		.byte	0x1
+ 1445 012d 11       		.uleb128 0x11
+ 1446 012e 01       		.uleb128 0x1
+ 1447 012f 31       		.uleb128 0x31
+ 1448 0130 13       		.uleb128 0x13
+ 1449 0131 01       		.uleb128 0x1
+ 1450 0132 13       		.uleb128 0x13
+ 1451 0133 00       		.byte	0
+ 1452 0134 00       		.byte	0
+ 1453 0135 1B       		.uleb128 0x1b
+ 1454 0136 8A8201   		.uleb128 0x410a
+ 1455 0139 00       		.byte	0
+ 1456 013a 02       		.uleb128 0x2
+ 1457 013b 18       		.uleb128 0x18
+ 1458 013c 9142     		.uleb128 0x2111
+ 1459 013e 18       		.uleb128 0x18
+ 1460 013f 00       		.byte	0
+ 1461 0140 00       		.byte	0
+ 1462 0141 1C       		.uleb128 0x1c
+ 1463 0142 898201   		.uleb128 0x4109
+ 1464 0145 01       		.byte	0x1
+ 1465 0146 11       		.uleb128 0x11
+ 1466 0147 01       		.uleb128 0x1
+ 1467 0148 31       		.uleb128 0x31
+ 1468 0149 13       		.uleb128 0x13
+ 1469 014a 00       		.byte	0
+ 1470 014b 00       		.byte	0
+ 1471 014c 1D       		.uleb128 0x1d
+ 1472 014d 2E       		.uleb128 0x2e
+ 1473 014e 01       		.byte	0x1
+ 1474 014f 3F       		.uleb128 0x3f
+ 1475 0150 19       		.uleb128 0x19
+ 1476 0151 03       		.uleb128 0x3
+ 1477 0152 0E       		.uleb128 0xe
+ 1478 0153 3A       		.uleb128 0x3a
+ 1479 0154 0B       		.uleb128 0xb
+ 1480 0155 3B       		.uleb128 0x3b
+ 1481 0156 0B       		.uleb128 0xb
+ 1482 0157 27       		.uleb128 0x27
+ 1483 0158 19       		.uleb128 0x19
+ 1484 0159 11       		.uleb128 0x11
+ 1485 015a 01       		.uleb128 0x1
+ 1486 015b 12       		.uleb128 0x12
+ 1487 015c 06       		.uleb128 0x6
+ 1488 015d 40       		.uleb128 0x40
+ 1489 015e 18       		.uleb128 0x18
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 30
+
+
+ 1490 015f 9742     		.uleb128 0x2117
+ 1491 0161 19       		.uleb128 0x19
+ 1492 0162 01       		.uleb128 0x1
+ 1493 0163 13       		.uleb128 0x13
+ 1494 0164 00       		.byte	0
+ 1495 0165 00       		.byte	0
+ 1496 0166 1E       		.uleb128 0x1e
+ 1497 0167 34       		.uleb128 0x34
+ 1498 0168 00       		.byte	0
+ 1499 0169 03       		.uleb128 0x3
+ 1500 016a 0E       		.uleb128 0xe
+ 1501 016b 3A       		.uleb128 0x3a
+ 1502 016c 0B       		.uleb128 0xb
+ 1503 016d 3B       		.uleb128 0x3b
+ 1504 016e 0B       		.uleb128 0xb
+ 1505 016f 49       		.uleb128 0x49
+ 1506 0170 13       		.uleb128 0x13
+ 1507 0171 02       		.uleb128 0x2
+ 1508 0172 18       		.uleb128 0x18
+ 1509 0173 00       		.byte	0
+ 1510 0174 00       		.byte	0
+ 1511 0175 1F       		.uleb128 0x1f
+ 1512 0176 2E       		.uleb128 0x2e
+ 1513 0177 00       		.byte	0
+ 1514 0178 3F       		.uleb128 0x3f
+ 1515 0179 19       		.uleb128 0x19
+ 1516 017a 3C       		.uleb128 0x3c
+ 1517 017b 19       		.uleb128 0x19
+ 1518 017c 6E       		.uleb128 0x6e
+ 1519 017d 0E       		.uleb128 0xe
+ 1520 017e 03       		.uleb128 0x3
+ 1521 017f 0E       		.uleb128 0xe
+ 1522 0180 3A       		.uleb128 0x3a
+ 1523 0181 0B       		.uleb128 0xb
+ 1524 0182 3B       		.uleb128 0x3b
+ 1525 0183 05       		.uleb128 0x5
+ 1526 0184 00       		.byte	0
+ 1527 0185 00       		.byte	0
+ 1528 0186 20       		.uleb128 0x20
+ 1529 0187 2E       		.uleb128 0x2e
+ 1530 0188 00       		.byte	0
+ 1531 0189 3F       		.uleb128 0x3f
+ 1532 018a 19       		.uleb128 0x19
+ 1533 018b 3C       		.uleb128 0x3c
+ 1534 018c 19       		.uleb128 0x19
+ 1535 018d 6E       		.uleb128 0x6e
+ 1536 018e 0E       		.uleb128 0xe
+ 1537 018f 03       		.uleb128 0x3
+ 1538 0190 0E       		.uleb128 0xe
+ 1539 0191 3A       		.uleb128 0x3a
+ 1540 0192 0B       		.uleb128 0xb
+ 1541 0193 3B       		.uleb128 0x3b
+ 1542 0194 0B       		.uleb128 0xb
+ 1543 0195 00       		.byte	0
+ 1544 0196 00       		.byte	0
+ 1545 0197 00       		.byte	0
+ 1546              		.section	.debug_loc,"",%progbits
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 31
+
+
+ 1547              	.Ldebug_loc0:
+ 1548              	.LLST0:
+ 1549 0000 00000000 		.4byte	.LVL0
+ 1550 0004 0B000000 		.4byte	.LVL2-1
+ 1551 0008 0100     		.2byte	0x1
+ 1552 000a 50       		.byte	0x50
+ 1553 000b 0B000000 		.4byte	.LVL2-1
+ 1554 000f 30000000 		.4byte	.LFE144
+ 1555 0013 0400     		.2byte	0x4
+ 1556 0015 F3       		.byte	0xf3
+ 1557 0016 01       		.uleb128 0x1
+ 1558 0017 50       		.byte	0x50
+ 1559 0018 9F       		.byte	0x9f
+ 1560 0019 00000000 		.4byte	0
+ 1561 001d 00000000 		.4byte	0
+ 1562              	.LLST1:
+ 1563 0021 0E000000 		.4byte	.LVL3
+ 1564 0025 12000000 		.4byte	.LVL4
+ 1565 0029 0100     		.2byte	0x1
+ 1566 002b 50       		.byte	0x50
+ 1567 002c 12000000 		.4byte	.LVL4
+ 1568 0030 28000000 		.4byte	.LVL7
+ 1569 0034 0100     		.2byte	0x1
+ 1570 0036 54       		.byte	0x54
+ 1571 0037 00000000 		.4byte	0
+ 1572 003b 00000000 		.4byte	0
+ 1573              	.LLST2:
+ 1574 003f 02000000 		.4byte	.LVL1
+ 1575 0043 0B000000 		.4byte	.LVL2-1
+ 1576 0047 0100     		.2byte	0x1
+ 1577 0049 50       		.byte	0x50
+ 1578 004a 0B000000 		.4byte	.LVL2-1
+ 1579 004e 30000000 		.4byte	.LFE144
+ 1580 0052 0400     		.2byte	0x4
+ 1581 0054 F3       		.byte	0xf3
+ 1582 0055 01       		.uleb128 0x1
+ 1583 0056 50       		.byte	0x50
+ 1584 0057 9F       		.byte	0x9f
+ 1585 0058 00000000 		.4byte	0
+ 1586 005c 00000000 		.4byte	0
+ 1587              	.LLST3:
+ 1588 0060 08000000 		.4byte	.LVL11
+ 1589 0064 0A000000 		.4byte	.LVL12
+ 1590 0068 0100     		.2byte	0x1
+ 1591 006a 50       		.byte	0x50
+ 1592 006b 0A000000 		.4byte	.LVL12
+ 1593 006f 24000000 		.4byte	.LVL17
+ 1594 0073 0100     		.2byte	0x1
+ 1595 0075 54       		.byte	0x54
+ 1596 0076 00000000 		.4byte	0
+ 1597 007a 00000000 		.4byte	0
+ 1598              		.section	.debug_aranges,"",%progbits
+ 1599 0000 34000000 		.4byte	0x34
+ 1600 0004 0200     		.2byte	0x2
+ 1601 0006 00000000 		.4byte	.Ldebug_info0
+ 1602 000a 04       		.byte	0x4
+ 1603 000b 00       		.byte	0
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 32
+
+
+ 1604 000c 0000     		.2byte	0
+ 1605 000e 0000     		.2byte	0
+ 1606 0010 00000000 		.4byte	.LFB144
+ 1607 0014 30000000 		.4byte	.LFE144-.LFB144
+ 1608 0018 00000000 		.4byte	.LFB143
+ 1609 001c 10000000 		.4byte	.LFE143-.LFB143
+ 1610 0020 00000000 		.4byte	.LFB141
+ 1611 0024 14000000 		.4byte	.LFE141-.LFB141
+ 1612 0028 00000000 		.4byte	.LFB142
+ 1613 002c 34000000 		.4byte	.LFE142-.LFB142
+ 1614 0030 00000000 		.4byte	0
+ 1615 0034 00000000 		.4byte	0
+ 1616              		.section	.debug_ranges,"",%progbits
+ 1617              	.Ldebug_ranges0:
+ 1618 0000 00000000 		.4byte	.LFB144
+ 1619 0004 30000000 		.4byte	.LFE144
+ 1620 0008 00000000 		.4byte	.LFB143
+ 1621 000c 10000000 		.4byte	.LFE143
+ 1622 0010 00000000 		.4byte	.LFB141
+ 1623 0014 14000000 		.4byte	.LFE141
+ 1624 0018 00000000 		.4byte	.LFB142
+ 1625 001c 34000000 		.4byte	.LFE142
+ 1626 0020 00000000 		.4byte	0
+ 1627 0024 00000000 		.4byte	0
+ 1628              		.section	.debug_line,"",%progbits
+ 1629              	.Ldebug_line0:
+ 1630 0000 DF020000 		.section	.debug_str,"MS",%progbits,1
+ 1630      02008602 
+ 1630      00000201 
+ 1630      FB0E0D00 
+ 1630      01010101 
+ 1631              	.LASF78:
+ 1632 0000 43595F49 		.ascii	"CY_IPC_SEMA_NOT_ACQUIRED\000"
+ 1632      50435F53 
+ 1632      454D415F 
+ 1632      4E4F545F 
+ 1632      41435155 
+ 1633              	.LASF21:
+ 1634 0019 4E766963 		.ascii	"NvicMux15_IRQn\000"
+ 1634      4D757831 
+ 1634      355F4952 
+ 1634      516E00
+ 1635              	.LASF0:
+ 1636 0028 52657365 		.ascii	"Reset_IRQn\000"
+ 1636      745F4952 
+ 1636      516E00
+ 1637              	.LASF8:
+ 1638 0033 4E766963 		.ascii	"NvicMux2_IRQn\000"
+ 1638      4D757832 
+ 1638      5F495251 
+ 1638      6E00
+ 1639              	.LASF43:
+ 1640 0041 5F5F7569 		.ascii	"__uint8_t\000"
+ 1640      6E74385F 
+ 1640      7400
+ 1641              	.LASF122:
+ 1642 004b 63795F69 		.ascii	"cy_ipc_pipe_sysEpArray\000"
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 33
+
+
+ 1642      70635F70 
+ 1642      6970655F 
+ 1642      73797345 
+ 1642      70417272 
+ 1643              	.LASF57:
+ 1644 0062 52454C45 		.ascii	"RELEASE\000"
+ 1644      41534500 
+ 1645              	.LASF110:
+ 1646 006a 636C6965 		.ascii	"clientID\000"
+ 1646      6E744944 
+ 1646      00
+ 1647              	.LASF96:
+ 1648 0073 63795F73 		.ascii	"cy_stc_ipc_pipe_ep_t\000"
+ 1648      74635F69 
+ 1648      70635F70 
+ 1648      6970655F 
+ 1648      65705F74 
+ 1649              	.LASF50:
+ 1650 0088 6C6F6E67 		.ascii	"long long unsigned int\000"
+ 1650      206C6F6E 
+ 1650      6720756E 
+ 1650      7369676E 
+ 1650      65642069 
+ 1651              	.LASF35:
+ 1652 009f 4E766963 		.ascii	"NvicMux29_IRQn\000"
+ 1652      4D757832 
+ 1652      395F4952 
+ 1652      516E00
+ 1653              	.LASF93:
+ 1654 00ae 63616C6C 		.ascii	"callbackArray\000"
+ 1654      6261636B 
+ 1654      41727261 
+ 1654      7900
+ 1655              	.LASF120:
+ 1656 00bc 63795F69 		.ascii	"cy_ipc_pipe_sysCbArray\000"
+ 1656      70635F70 
+ 1656      6970655F 
+ 1656      73797343 
+ 1656      62417272 
+ 1657              	.LASF30:
+ 1658 00d3 4E766963 		.ascii	"NvicMux24_IRQn\000"
+ 1658      4D757832 
+ 1658      345F4952 
+ 1658      516E00
+ 1659              	.LASF136:
+ 1660 00e2 43795F46 		.ascii	"Cy_Flash_NotifyHandler\000"
+ 1660      6C617368 
+ 1660      5F4E6F74 
+ 1660      69667948 
+ 1660      616E646C 
+ 1661              	.LASF104:
+ 1662 00f9 65703143 		.ascii	"ep1ConfigData\000"
+ 1662      6F6E6669 
+ 1662      67446174 
+ 1662      6100
+ 1663              	.LASF49:
+ 1664 0107 6C6F6E67 		.ascii	"long long int\000"
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 34
+
+
+ 1664      206C6F6E 
+ 1664      6720696E 
+ 1664      7400
+ 1665              	.LASF41:
+ 1666 0115 7369676E 		.ascii	"signed char\000"
+ 1666      65642063 
+ 1666      68617200 
+ 1667              	.LASF22:
+ 1668 0121 4E766963 		.ascii	"NvicMux16_IRQn\000"
+ 1668      4D757831 
+ 1668      365F4952 
+ 1668      516E00
+ 1669              	.LASF56:
+ 1670 0130 41435155 		.ascii	"ACQUIRE\000"
+ 1670      49524500 
+ 1671              	.LASF105:
+ 1672 0138 656E6470 		.ascii	"endpointClientsCount\000"
+ 1672      6F696E74 
+ 1672      436C6965 
+ 1672      6E747343 
+ 1672      6F756E74 
+ 1673              	.LASF9:
+ 1674 014d 4E766963 		.ascii	"NvicMux3_IRQn\000"
+ 1674      4D757833 
+ 1674      5F495251 
+ 1674      6E00
+ 1675              	.LASF46:
+ 1676 015b 6C6F6E67 		.ascii	"long int\000"
+ 1676      20696E74 
+ 1676      00
+ 1677              	.LASF34:
+ 1678 0164 4E766963 		.ascii	"NvicMux28_IRQn\000"
+ 1678      4D757832 
+ 1678      385F4952 
+ 1678      516E00
+ 1679              	.LASF83:
+ 1680 0173 63795F69 		.ascii	"cy_ipc_pipe_relcallback_ptr_t\000"
+ 1680      70635F70 
+ 1680      6970655F 
+ 1680      72656C63 
+ 1680      616C6C62 
+ 1681              	.LASF85:
+ 1682 0191 69706343 		.ascii	"ipcChan\000"
+ 1682      68616E00 
+ 1683              	.LASF71:
+ 1684 0199 646F7562 		.ascii	"double\000"
+ 1684      6C6500
+ 1685              	.LASF129:
+ 1686 01a0 43795F49 		.ascii	"Cy_IPC_Pipe_Config\000"
+ 1686      50435F50 
+ 1686      6970655F 
+ 1686      436F6E66 
+ 1686      696700
+ 1687              	.LASF121:
+ 1688 01b3 73797374 		.ascii	"systemPipeConfig\000"
+ 1688      656D5069 
+ 1688      7065436F 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 35
+
+
+ 1688      6E666967 
+ 1688      00
+ 1689              	.LASF4:
+ 1690 01c4 50656E64 		.ascii	"PendSV_IRQn\000"
+ 1690      53565F49 
+ 1690      52516E00 
+ 1691              	.LASF126:
+ 1692 01d0 43795F53 		.ascii	"Cy_SysLib_ExitCriticalSection\000"
+ 1692      79734C69 
+ 1692      625F4578 
+ 1692      69744372 
+ 1692      69746963 
+ 1693              	.LASF2:
+ 1694 01ee 48617264 		.ascii	"HardFault_IRQn\000"
+ 1694      4661756C 
+ 1694      745F4952 
+ 1694      516E00
+ 1695              	.LASF37:
+ 1696 01fd 4E766963 		.ascii	"NvicMux31_IRQn\000"
+ 1696      4D757833 
+ 1696      315F4952 
+ 1696      516E00
+ 1697              	.LASF127:
+ 1698 020c 43795F49 		.ascii	"Cy_IPC_Pipe_ExecCallback\000"
+ 1698      50435F50 
+ 1698      6970655F 
+ 1698      45786563 
+ 1698      43616C6C 
+ 1699              	.LASF47:
+ 1700 0225 5F5F7569 		.ascii	"__uint32_t\000"
+ 1700      6E743332 
+ 1700      5F7400
+ 1701              	.LASF60:
+ 1702 0230 4C4F434B 		.ascii	"LOCK_STATUS\000"
+ 1702      5F535441 
+ 1702      54555300 
+ 1703              	.LASF97:
+ 1704 023c 6970634E 		.ascii	"ipcNotifierNumber\000"
+ 1704      6F746966 
+ 1704      6965724E 
+ 1704      756D6265 
+ 1704      7200
+ 1705              	.LASF10:
+ 1706 024e 4E766963 		.ascii	"NvicMux4_IRQn\000"
+ 1706      4D757834 
+ 1706      5F495251 
+ 1706      6E00
+ 1707              	.LASF74:
+ 1708 025c 43595F49 		.ascii	"CY_IPC_SEMA_ERROR_LOCKED\000"
+ 1708      50435F53 
+ 1708      454D415F 
+ 1708      4552524F 
+ 1708      525F4C4F 
+ 1709              	.LASF115:
+ 1710 0275 6970634D 		.ascii	"ipcMsgPtr\000"
+ 1710      73675074 
+ 1710      7200
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 36
+
+
+ 1711              	.LASF51:
+ 1712 027f 756E7369 		.ascii	"unsigned int\000"
+ 1712      676E6564 
+ 1712      20696E74 
+ 1712      00
+ 1713              	.LASF26:
+ 1714 028c 4E766963 		.ascii	"NvicMux20_IRQn\000"
+ 1714      4D757832 
+ 1714      305F4952 
+ 1714      516E00
+ 1715              	.LASF53:
+ 1716 029b 75696E74 		.ascii	"uint16_t\000"
+ 1716      31365F74 
+ 1716      00
+ 1717              	.LASF86:
+ 1718 02a4 696E7472 		.ascii	"intrChan\000"
+ 1718      4368616E 
+ 1718      00
+ 1719              	.LASF73:
+ 1720 02ad 43595F49 		.ascii	"CY_IPC_SEMA_SUCCESS\000"
+ 1720      50435F53 
+ 1720      454D415F 
+ 1720      53554343 
+ 1720      45535300 
+ 1721              	.LASF48:
+ 1722 02c1 6C6F6E67 		.ascii	"long unsigned int\000"
+ 1722      20756E73 
+ 1722      69676E65 
+ 1722      6420696E 
+ 1722      7400
+ 1723              	.LASF18:
+ 1724 02d3 4E766963 		.ascii	"NvicMux12_IRQn\000"
+ 1724      4D757831 
+ 1724      325F4952 
+ 1724      516E00
+ 1725              	.LASF79:
+ 1726 02e2 43595F49 		.ascii	"CY_IPC_SEMA_LOCKED\000"
+ 1726      50435F53 
+ 1726      454D415F 
+ 1726      4C4F434B 
+ 1726      454400
+ 1727              	.LASF32:
+ 1728 02f5 4E766963 		.ascii	"NvicMux26_IRQn\000"
+ 1728      4D757832 
+ 1728      365F4952 
+ 1728      516E00
+ 1729              	.LASF84:
+ 1730 0304 63795F69 		.ascii	"cy_ipc_pipe_callback_array_ptr_t\000"
+ 1730      70635F70 
+ 1730      6970655F 
+ 1730      63616C6C 
+ 1730      6261636B 
+ 1731              	.LASF14:
+ 1732 0325 4E766963 		.ascii	"NvicMux8_IRQn\000"
+ 1732      4D757838 
+ 1732      5F495251 
+ 1732      6E00
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 37
+
+
+ 1733              	.LASF45:
+ 1734 0333 73686F72 		.ascii	"short unsigned int\000"
+ 1734      7420756E 
+ 1734      7369676E 
+ 1734      65642069 
+ 1734      6E7400
+ 1735              	.LASF89:
+ 1736 0346 69706350 		.ascii	"ipcPtr\000"
+ 1736      747200
+ 1737              	.LASF108:
+ 1738 034d 63795F73 		.ascii	"cy_stc_ipc_pipe_config_t\000"
+ 1738      74635F69 
+ 1738      70635F70 
+ 1738      6970655F 
+ 1738      636F6E66 
+ 1739              	.LASF130:
+ 1740 0366 43795F49 		.ascii	"Cy_IPC_Pipe_Init\000"
+ 1740      50435F50 
+ 1740      6970655F 
+ 1740      496E6974 
+ 1740      00
+ 1741              	.LASF59:
+ 1742 0377 44415441 		.ascii	"DATA\000"
+ 1742      00
+ 1743              	.LASF128:
+ 1744 037c 43795F49 		.ascii	"Cy_IPC_Sema_Init\000"
+ 1744      50435F53 
+ 1744      656D615F 
+ 1744      496E6974 
+ 1744      00
+ 1745              	.LASF80:
+ 1746 038d 43595F49 		.ascii	"CY_IPC_SEMA_STATUS_LOCKED\000"
+ 1746      50435F53 
+ 1746      454D415F 
+ 1746      53544154 
+ 1746      55535F4C 
+ 1747              	.LASF123:
+ 1748 03a7 43795F53 		.ascii	"Cy_SysLib_EnterCriticalSection\000"
+ 1748      79734C69 
+ 1748      625F456E 
+ 1748      74657243 
+ 1748      72697469 
+ 1749              	.LASF106:
+ 1750 03c6 656E6470 		.ascii	"endpointsCallbacksArray\000"
+ 1750      6F696E74 
+ 1750      7343616C 
+ 1750      6C626163 
+ 1750      6B734172 
+ 1751              	.LASF27:
+ 1752 03de 4E766963 		.ascii	"NvicMux21_IRQn\000"
+ 1752      4D757832 
+ 1752      315F4952 
+ 1752      516E00
+ 1753              	.LASF5:
+ 1754 03ed 53797354 		.ascii	"SysTick_IRQn\000"
+ 1754      69636B5F 
+ 1754      4952516E 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 38
+
+
+ 1754      00
+ 1755              	.LASF98:
+ 1756 03fa 6970634E 		.ascii	"ipcNotifierPriority\000"
+ 1756      6F746966 
+ 1756      69657250 
+ 1756      72696F72 
+ 1756      69747900 
+ 1757              	.LASF75:
+ 1758 040e 43595F49 		.ascii	"CY_IPC_SEMA_ERROR_UNLOCKED\000"
+ 1758      50435F53 
+ 1758      454D415F 
+ 1758      4552524F 
+ 1758      525F554E 
+ 1759              	.LASF77:
+ 1760 0429 43595F49 		.ascii	"CY_IPC_SEMA_OUT_OF_RANGE\000"
+ 1760      50435F53 
+ 1760      454D415F 
+ 1760      4F55545F 
+ 1760      4F465F52 
+ 1761              	.LASF133:
+ 1762 0442 63795F69 		.ascii	"cy_ipc_config.c\000"
+ 1762      70635F63 
+ 1762      6F6E6669 
+ 1762      672E6300 
+ 1763              	.LASF64:
+ 1764 0452 494E5452 		.ascii	"INTR_SET\000"
+ 1764      5F534554 
+ 1764      00
+ 1765              	.LASF19:
+ 1766 045b 4E766963 		.ascii	"NvicMux13_IRQn\000"
+ 1766      4D757831 
+ 1766      335F4952 
+ 1766      516E00
+ 1767              	.LASF116:
+ 1768 046a 4E766963 		.ascii	"NvicMux1_IRQHandler\000"
+ 1768      4D757831 
+ 1768      5F495251 
+ 1768      48616E64 
+ 1768      6C657200 
+ 1769              	.LASF55:
+ 1770 047e 73697A65 		.ascii	"sizetype\000"
+ 1770      74797065 
+ 1770      00
+ 1771              	.LASF6:
+ 1772 0487 4E766963 		.ascii	"NvicMux0_IRQn\000"
+ 1772      4D757830 
+ 1772      5F495251 
+ 1772      6E00
+ 1773              	.LASF15:
+ 1774 0495 4E766963 		.ascii	"NvicMux9_IRQn\000"
+ 1774      4D757839 
+ 1774      5F495251 
+ 1774      6E00
+ 1775              	.LASF3:
+ 1776 04a3 53564361 		.ascii	"SVCall_IRQn\000"
+ 1776      6C6C5F49 
+ 1776      52516E00 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 39
+
+
+ 1777              	.LASF114:
+ 1778 04af 696E7472 		.ascii	"intr\000"
+ 1778      00
+ 1779              	.LASF87:
+ 1780 04b4 70697065 		.ascii	"pipeIntMask\000"
+ 1780      496E744D 
+ 1780      61736B00 
+ 1781              	.LASF135:
+ 1782 04c0 5F495043 		.ascii	"_IPC_MSG\000"
+ 1782      5F4D5347 
+ 1782      00
+ 1783              	.LASF31:
+ 1784 04c9 4E766963 		.ascii	"NvicMux25_IRQn\000"
+ 1784      4D757832 
+ 1784      355F4952 
+ 1784      516E00
+ 1785              	.LASF63:
+ 1786 04d8 494E5452 		.ascii	"INTR\000"
+ 1786      00
+ 1787              	.LASF68:
+ 1788 04dd 63795F69 		.ascii	"cy_israddress\000"
+ 1788      73726164 
+ 1788      64726573 
+ 1788      7300
+ 1789              	.LASF81:
+ 1790 04eb 43595F49 		.ascii	"CY_IPC_SEMA_STATUS_UNLOCKED\000"
+ 1790      50435F53 
+ 1790      454D415F 
+ 1790      53544154 
+ 1790      55535F55 
+ 1791              	.LASF94:
+ 1792 0507 72656C65 		.ascii	"releaseCallbackPtr\000"
+ 1792      61736543 
+ 1792      616C6C62 
+ 1792      61636B50 
+ 1792      747200
+ 1793              	.LASF23:
+ 1794 051a 4E766963 		.ascii	"NvicMux17_IRQn\000"
+ 1794      4D757831 
+ 1794      375F4952 
+ 1794      516E00
+ 1795              	.LASF66:
+ 1796 0529 494E5452 		.ascii	"INTR_MASKED\000"
+ 1796      5F4D4153 
+ 1796      4B454400 
+ 1797              	.LASF70:
+ 1798 0535 666C6F61 		.ascii	"float\000"
+ 1798      7400
+ 1799              	.LASF20:
+ 1800 053b 4E766963 		.ascii	"NvicMux14_IRQn\000"
+ 1800      4D757831 
+ 1800      345F4952 
+ 1800      516E00
+ 1801              	.LASF111:
+ 1802 054a 706B7454 		.ascii	"pktType\000"
+ 1802      79706500 
+ 1803              	.LASF137:
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 40
+
+
+ 1804 0552 6D736750 		.ascii	"msgPtr\000"
+ 1804      747200
+ 1805              	.LASF29:
+ 1806 0559 4E766963 		.ascii	"NvicMux23_IRQn\000"
+ 1806      4D757832 
+ 1806      335F4952 
+ 1806      516E00
+ 1807              	.LASF109:
+ 1808 0568 5F426F6F 		.ascii	"_Bool\000"
+ 1808      6C00
+ 1809              	.LASF92:
+ 1810 056e 636C6965 		.ascii	"clientCount\000"
+ 1810      6E74436F 
+ 1810      756E7400 
+ 1811              	.LASF40:
+ 1812 057a 756E7369 		.ascii	"unsigned char\000"
+ 1812      676E6564 
+ 1812      20636861 
+ 1812      7200
+ 1813              	.LASF118:
+ 1814 0588 69706353 		.ascii	"ipcSemaArray\000"
+ 1814      656D6141 
+ 1814      72726179 
+ 1814      00
+ 1815              	.LASF101:
+ 1816 0595 6570436F 		.ascii	"epConfig\000"
+ 1816      6E666967 
+ 1816      00
+ 1817              	.LASF38:
+ 1818 059e 756E636F 		.ascii	"unconnected_IRQn\000"
+ 1818      6E6E6563 
+ 1818      7465645F 
+ 1818      4952516E 
+ 1818      00
+ 1819              	.LASF39:
+ 1820 05af 73686F72 		.ascii	"short int\000"
+ 1820      7420696E 
+ 1820      7400
+ 1821              	.LASF112:
+ 1822 05b9 696E7472 		.ascii	"intrRelMask\000"
+ 1822      52656C4D 
+ 1822      61736B00 
+ 1823              	.LASF67:
+ 1824 05c5 4950435F 		.ascii	"IPC_INTR_STRUCT_Type\000"
+ 1824      494E5452 
+ 1824      5F535452 
+ 1824      5543545F 
+ 1824      54797065 
+ 1825              	.LASF61:
+ 1826 05da 52455345 		.ascii	"RESERVED\000"
+ 1826      52564544 
+ 1826      00
+ 1827              	.LASF102:
+ 1828 05e3 63795F73 		.ascii	"cy_stc_ipc_pipe_ep_config_t\000"
+ 1828      74635F69 
+ 1828      70635F70 
+ 1828      6970655F 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 41
+
+
+ 1828      65705F63 
+ 1829              	.LASF82:
+ 1830 05ff 63795F69 		.ascii	"cy_ipc_pipe_callback_ptr_t\000"
+ 1830      70635F70 
+ 1830      6970655F 
+ 1830      63616C6C 
+ 1830      6261636B 
+ 1831              	.LASF113:
+ 1832 061a 4950435F 		.ascii	"IPC_MSG\000"
+ 1832      4D534700 
+ 1833              	.LASF131:
+ 1834 0622 43795F49 		.ascii	"Cy_IPC_Pipe_RegisterCallback\000"
+ 1834      50435F50 
+ 1834      6970655F 
+ 1834      52656769 
+ 1834      73746572 
+ 1835              	.LASF11:
+ 1836 063f 4E766963 		.ascii	"NvicMux5_IRQn\000"
+ 1836      4D757835 
+ 1836      5F495251 
+ 1836      6E00
+ 1837              	.LASF90:
+ 1838 064d 69706349 		.ascii	"ipcIntrPtr\000"
+ 1838      6E747250 
+ 1838      747200
+ 1839              	.LASF54:
+ 1840 0658 75696E74 		.ascii	"uint32_t\000"
+ 1840      33325F74 
+ 1840      00
+ 1841              	.LASF125:
+ 1842 0661 43795F49 		.ascii	"Cy_IPC_Sema_Status\000"
+ 1842      50435F53 
+ 1842      656D615F 
+ 1842      53746174 
+ 1842      757300
+ 1843              	.LASF99:
+ 1844 0674 6970634E 		.ascii	"ipcNotifierMuxNumber\000"
+ 1844      6F746966 
+ 1844      6965724D 
+ 1844      75784E75 
+ 1844      6D626572 
+ 1845              	.LASF58:
+ 1846 0689 4E4F5449 		.ascii	"NOTIFY\000"
+ 1846      465900
+ 1847              	.LASF132:
+ 1848 0690 474E5520 		.ascii	"GNU C11 5.4.1 20160609 (release) [ARM/embedded-5-br"
+ 1848      43313120 
+ 1848      352E342E 
+ 1848      31203230 
+ 1848      31363036 
+ 1849 06c3 616E6368 		.ascii	"anch revision 237715] -mcpu=cortex-m0plus -mthumb -"
+ 1849      20726576 
+ 1849      6973696F 
+ 1849      6E203233 
+ 1849      37373135 
+ 1850 06f6 67202D4F 		.ascii	"g -Og -ffunction-sections -ffat-lto-objects\000"
+ 1850      67202D66 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 42
+
+
+ 1850      66756E63 
+ 1850      74696F6E 
+ 1850      2D736563 
+ 1851              	.LASF72:
+ 1852 0722 6C6F6E67 		.ascii	"long double\000"
+ 1852      20646F75 
+ 1852      626C6500 
+ 1853              	.LASF69:
+ 1854 072e 63686172 		.ascii	"char\000"
+ 1854      00
+ 1855              	.LASF24:
+ 1856 0733 4E766963 		.ascii	"NvicMux18_IRQn\000"
+ 1856      4D757831 
+ 1856      385F4952 
+ 1856      516E00
+ 1857              	.LASF119:
+ 1858 0742 43795F49 		.ascii	"Cy_IPC_SystemPipeInit\000"
+ 1858      50435F53 
+ 1858      79737465 
+ 1858      6D506970 
+ 1858      65496E69 
+ 1859              	.LASF44:
+ 1860 0758 5F5F7569 		.ascii	"__uint16_t\000"
+ 1860      6E743136 
+ 1860      5F7400
+ 1861              	.LASF42:
+ 1862 0763 4952516E 		.ascii	"IRQn_Type\000"
+ 1862      5F547970 
+ 1862      6500
+ 1863              	.LASF33:
+ 1864 076d 4E766963 		.ascii	"NvicMux27_IRQn\000"
+ 1864      4D757832 
+ 1864      375F4952 
+ 1864      516E00
+ 1865              	.LASF1:
+ 1866 077c 4E6F6E4D 		.ascii	"NonMaskableInt_IRQn\000"
+ 1866      61736B61 
+ 1866      626C6549 
+ 1866      6E745F49 
+ 1866      52516E00 
+ 1867              	.LASF16:
+ 1868 0790 4E766963 		.ascii	"NvicMux10_IRQn\000"
+ 1868      4D757831 
+ 1868      305F4952 
+ 1868      516E00
+ 1869              	.LASF25:
+ 1870 079f 4E766963 		.ascii	"NvicMux19_IRQn\000"
+ 1870      4D757831 
+ 1870      395F4952 
+ 1870      516E00
+ 1871              	.LASF88:
+ 1872 07ae 70697065 		.ascii	"pipeIntrSrc\000"
+ 1872      496E7472 
+ 1872      53726300 
+ 1873              	.LASF12:
+ 1874 07ba 4E766963 		.ascii	"NvicMux6_IRQn\000"
+ 1874      4D757836 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 43
+
+
+ 1874      5F495251 
+ 1874      6E00
+ 1875              	.LASF36:
+ 1876 07c8 4E766963 		.ascii	"NvicMux30_IRQn\000"
+ 1876      4D757833 
+ 1876      305F4952 
+ 1876      516E00
+ 1877              	.LASF28:
+ 1878 07d7 4E766963 		.ascii	"NvicMux22_IRQn\000"
+ 1878      4D757832 
+ 1878      325F4952 
+ 1878      516E00
+ 1879              	.LASF52:
+ 1880 07e6 75696E74 		.ascii	"uint8_t\000"
+ 1880      385F7400 
+ 1881              	.LASF91:
+ 1882 07ee 62757379 		.ascii	"busy\000"
+ 1882      00
+ 1883              	.LASF65:
+ 1884 07f3 494E5452 		.ascii	"INTR_MASK\000"
+ 1884      5F4D4153 
+ 1884      4B00
+ 1885              	.LASF7:
+ 1886 07fd 4E766963 		.ascii	"NvicMux1_IRQn\000"
+ 1886      4D757831 
+ 1886      5F495251 
+ 1886      6E00
+ 1887              	.LASF17:
+ 1888 080b 4E766963 		.ascii	"NvicMux11_IRQn\000"
+ 1888      4D757831 
+ 1888      315F4952 
+ 1888      516E00
+ 1889              	.LASF76:
+ 1890 081a 43595F49 		.ascii	"CY_IPC_SEMA_BAD_PARAM\000"
+ 1890      50435F53 
+ 1890      454D415F 
+ 1890      4241445F 
+ 1890      50415241 
+ 1891              	.LASF62:
+ 1892 0830 4950435F 		.ascii	"IPC_STRUCT_Type\000"
+ 1892      53545255 
+ 1892      43545F54 
+ 1892      79706500 
+ 1893              	.LASF100:
+ 1894 0840 65704164 		.ascii	"epAddress\000"
+ 1894      64726573 
+ 1894      7300
+ 1895              	.LASF13:
+ 1896 084a 4E766963 		.ascii	"NvicMux7_IRQn\000"
+ 1896      4D757837 
+ 1896      5F495251 
+ 1896      6E00
+ 1897              	.LASF117:
+ 1898 0858 43795F49 		.ascii	"Cy_IPC_SystemSemaInit\000"
+ 1898      50435F53 
+ 1898      79737465 
+ 1898      6D53656D 
+ARM GAS  C:\Users\kiwamu\AppData\Local\Temp\ccwiAToj.s 			page 44
+
+
+ 1898      61496E69 
+ 1899              	.LASF95:
+ 1900 086e 64656661 		.ascii	"defaultReleaseCallbackPtr\000"
+ 1900      756C7452 
+ 1900      656C6561 
+ 1900      73654361 
+ 1900      6C6C6261 
+ 1901              	.LASF107:
+ 1902 0888 75736572 		.ascii	"userPipeIsrHandler\000"
+ 1902      50697065 
+ 1902      49737248 
+ 1902      616E646C 
+ 1902      657200
+ 1903              	.LASF124:
+ 1904 089b 43795F49 		.ascii	"Cy_IPC_Sema_Set\000"
+ 1904      50435F53 
+ 1904      656D615F 
+ 1904      53657400 
+ 1905              	.LASF134:
+ 1906 08ab 433A5C55 		.ascii	"C:\\Users\\kiwamu\\Downloads\\CE220465\\CE220465_PS"
+ 1906      73657273 
+ 1906      5C6B6977 
+ 1906      616D755C 
+ 1906      446F776E 
+ 1907 08d9 6F435F36 		.ascii	"oC_6_MCU_Cryptography_AES_Demonstration.cydsn\000"
+ 1907      5F4D4355 
+ 1907      5F437279 
+ 1907      70746F67 
+ 1907      72617068 
+ 1908              	.LASF103:
+ 1909 0907 65703043 		.ascii	"ep0ConfigData\000"
+ 1909      6F6E6669 
+ 1909      67446174 
+ 1909      6100
+ 1910              		.ident	"GCC: (GNU Tools for ARM Embedded Processors) 5.4.1 20160609 (release) [ARM/embedded-5-bran

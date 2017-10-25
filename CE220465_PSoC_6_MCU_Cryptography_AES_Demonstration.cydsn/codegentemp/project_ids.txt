@@ -1,0 +1,8 @@
+C:\Users\kiwamu\Downloads\CE220465\CE220465_PSoC_6_MCU_Cryptography_AES_Demonstration.cydsn\CE220465_PSoC_6_MCU_Cryptography_AES_Demonstration.cyprj|a9a28f64-1180-490b-9503-48970d18d818
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\default\CyAnnotationLibrary\CyAnnotationLibrary.cylib\CyAnnotationLibrary.cyprj|a05b14db-b4bc-4724-aa23-80f55952b2a9
+C:\Users\kiwamu\Documents\PSoC Creator\4.2\Downloads ( 4.2).cylib\Downloads ( 4.2).cyprj|f0021cd8-ee8b-45a9-9efa-49da3d2397f8
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\cycomponentlibraryupdates\CyComponentLibraryUpdates.cylib\CyComponentLibraryUpdates.cyprj|3adb7772-2601-46cc-be9b-e33e04a7b34b
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\cycomponentlibrary\CyComponentLibrary.cylib\CyComponentLibrary.cyprj|837fbd6a-66ae-428a-9fee-087ae87cb386
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\cyprimitives\CyPrimitives.cylib\CyPrimitives.cyprj|ecf21178-463d-419d-b988-f5aaaa038c37
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\dev\psoc6\PSoC6AnalogDevice\PSoC6AnalogDevice.cydsn\PSoC6AnalogDevice.cyprj|20d459b0-055a-4f94-9e86-74c976cb0f33
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\default\CyReferenceLibrary\CyReferenceLibrary.cylib\CyReferenceLibrary.cyprj|e85ab937-3c7d-4765-9ccc-5777f6532147
